@@ -1,0 +1,335 @@
+# Product Requirements Document (PRD)
+
+## Admin Dashboard — Assam Association Delhi
+
+---
+
+# 1. Overview
+
+## 1.1 Purpose
+
+The Admin Dashboard is a secure, user-friendly content management system (CMS) designed for non-technical users to manage website content, bookings, documents, and media efficiently.
+
+## 1.2 Goals
+
+* Enable easy content updates without technical knowledge
+* Provide centralized control over all website data
+* Ensure scalability, security, and performance
+* Maintain clean UX for low learning curve
+
+---
+
+# 2. Users & Roles
+
+## 2.1 User Type
+
+* Admin (1–2 users only)
+
+## 2.2 Permissions
+
+* Full CRUD access across all modules
+* Authentication required for all actions
+
+---
+
+# 3. Core Modules
+
+## 3.1 Dashboard Overview
+
+### Features
+
+* Summary cards:
+
+  * Total bookings
+  * Pending bookings
+  * Total notices
+  * Total documents
+* Recent activity list
+
+---
+
+## 3.2 Booking Management
+
+### Features
+
+* View all bookings (table view)
+* Filters:
+
+  * Status (Pending, Approved, Rejected)
+  * Date
+  * Facility
+
+### Actions
+
+* Approve booking
+* Reject booking
+* View details
+
+### Logic
+
+* On approval:
+
+  * Update status
+  * Add entry to blocked_dates
+  * Trigger confirmation email
+
+### Export
+
+* Export bookings as CSV/Excel
+
+---
+
+## 3.3 Notices Management
+
+### Features
+
+* Create, edit, delete notices
+* Rich text editor
+* Optional PDF upload
+* Pin important notice
+
+### Fields
+
+* Title
+* Content
+* PDF (optional)
+* Pinned toggle
+
+---
+
+## 3.4 Documents Management
+
+### Features
+
+* Upload documents
+* Categorize by:
+
+  * Category
+  * Year
+
+### Actions
+
+* Upload
+* Delete
+* Edit metadata
+
+---
+
+## 3.5 Gallery Management
+
+### Features
+
+* Create album
+* Upload multiple images
+* Set cover image
+* Add YouTube video links
+
+### Actions
+
+* Delete media
+* Edit album
+
+---
+
+## 3.6 Committee Management
+
+### Features
+
+* Add/edit/remove members
+
+### Fields
+
+* Name
+* Role
+* Image
+
+---
+
+## 3.7 Services Management
+
+### Features
+
+* Manage facilities content
+
+### Fields
+
+* Name
+* Description
+* Image
+
+---
+
+## 3.8 Contact Messages
+
+### Features
+
+* View messages submitted via contact form
+* No reply system required
+
+---
+
+# 4. UI/UX Requirements
+
+## 4.1 Design Principles
+
+* Clean, minimal dashboard UI
+* Large clickable areas
+* Clear labels
+* No technical jargon
+
+## 4.2 Components
+
+* Sidebar navigation
+* Top header with user info
+* Data tables
+* Forms with validation
+
+## 4.3 Feedback System
+
+* Toast notifications for:
+
+  * Success
+  * Error
+  * Warning
+
+---
+
+# 5. Validation & Error Handling
+
+## 5.1 Frontend Validation
+
+* Required fields validation
+* Proper input formats
+
+## 5.2 Backend Validation
+
+* Schema validation (Zod or equivalent)
+* Sanitization of inputs
+
+## 5.3 Error Handling
+
+* Standard error response format:
+
+```
+{
+  success: false,
+  message: "Error message",
+  errorCode: "OPTIONAL_CODE"
+}
+```
+
+## 5.4 Success Response
+
+```
+{
+  success: true,
+  data: {}
+}
+```
+
+---
+
+# 6. Authentication & Security
+
+## 6.1 Authentication
+
+* Firebase Authentication
+* Email/password login
+
+## 6.2 Authorization
+
+* Admin-only access
+
+## 6.3 Security Practices
+
+* Protected routes
+* Firestore rules (admin write only)
+* Input validation
+* Rate limiting (API level)
+
+---
+
+# 7. Performance Requirements
+
+* Lazy loading for tables
+* Pagination for large datasets
+* Image compression via Cloudinary
+
+---
+
+# 8. API Requirements
+
+## Booking
+
+* POST /bookings
+* GET /bookings
+* PATCH /bookings/:id
+* GET /bookings/export
+
+## Notices
+
+* CRUD endpoints
+
+## Documents
+
+* CRUD endpoints
+
+## Gallery
+
+* Album + media endpoints
+
+## Committee
+
+* CRUD endpoints
+
+## Services
+
+* CRUD endpoints
+
+## Contact
+
+* GET endpoint
+
+---
+
+# 9. Logging & Monitoring
+
+* Log all admin actions
+* Error logging (Sentry recommended)
+
+---
+
+# 10. Deployment
+
+* Hosted on Vercel
+* Environment variables secured
+* CI/CD via GitHub integration
+
+---
+
+# 11. Future Scalability
+
+* Payment integration ready
+* Membership module extendable
+* Event management system extendable
+
+---
+
+# 12. Non-Functional Requirements
+
+* Mobile responsive dashboard
+* Fast load times
+* High availability
+
+---
+
+# 13. Deliverables
+
+* Fully functional admin dashboard
+* Integrated APIs
+* Firebase setup
+* Documentation
+
+---
+
+# END OF PRD

@@ -1,0 +1,63 @@
+/**
+ * Cloudinary Upload Utility
+ * Handles direct uploads to Cloudinary using Unsigned Presets.
+ * Automatically applies format and quality optimization (f_auto, q_auto).
+ */
+
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "your_cloud_name";
+const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "your_upload_preset";
+
+export interface CloudinaryUploadResponse {
+  secure_url: string;
+  public_id: string;
+  width: number;
+  height: number;
+  format: string;
+  resource_type: string;
+}
+
+export const uploadToCloudinary = async (file: File): Promise<string> => {
+  if (CLOUDINARY_CLOUD_NAME === "your_cloud_name") {
+    throw new Error("Cloudinary Cloud Name is not configured in .env.local");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  try {
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || "Cloudinary upload failed");
+    }
+
+    const data: CloudinaryUploadResponse = await response.json();
+    
+    // Apply automatic optimization to the returned URL
+    // We replace '/upload/' with '/upload/f_auto,q_auto/'
+    const optimizedUrl = data.secure_url.replace("/upload/", "/upload/f_auto,q_auto/");
+    
+    return optimizedUrl;
+  } catch (error) {
+    console.error("Cloudinary Upload Error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Optimizes an existing Cloudinary URL
+ * @param url The original Cloudinary secure_url
+ * @returns Optimized URL with f_auto, q_auto
+ */
+export const optimizeCloudinaryUrl = (url: string): string => {
+  if (!url.includes("cloudinary.com")) return url;
+  return url.replace("/upload/", "/upload/f_auto,q_auto/");
+};
