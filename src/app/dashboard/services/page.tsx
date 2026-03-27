@@ -220,7 +220,7 @@ export default function ServicesPage() {
                   <div className="relative h-48 w-full bg-gray-100">
                     <Image 
                       src={service.image} 
-                      alt={service.name} 
+                      alt={service.name || "Service Image"} 
                       fill 
                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500" 
@@ -327,7 +327,7 @@ export default function ServicesPage() {
                   <Loader2 size={32} className="animate-spin text-indigo-600" />
                 ) : currentService?.image ? (
                   <>
-                    <Image src={currentService.image} fill sizes="(max-width: 768px) 100vw, 500px" alt="Service" className="object-cover" />
+                    <Image src={currentService.image} fill sizes="(max-width: 768px) 100vw, 500px" alt={currentService.name || "Service"} className="object-cover" />
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                       <Camera size={32} className="text-white" />
                     </div>

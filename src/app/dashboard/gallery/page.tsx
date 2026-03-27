@@ -286,7 +286,7 @@ export default function GalleryPage() {
                   <div className="relative aspect-[4/3] rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 mb-4 bg-gray-100">
                     <Image 
                       src={album.coverImage} 
-                      alt={album.title} 
+                      alt={album.title || "Album Cover"} 
                       fill 
                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       className="object-cover group-hover:scale-110 transition-transform duration-700" 
@@ -388,7 +388,7 @@ export default function GalleryPage() {
                   <Loader2 size={32} className="animate-spin text-indigo-600" />
                 ) : currentAlbum?.coverImage ? (
                   <>
-                    <Image src={currentAlbum.coverImage} fill sizes="(max-width: 768px) 100vw, 500px" alt="Cover" className="object-cover" />
+                    <Image src={currentAlbum.coverImage} fill sizes="(max-width: 768px) 100vw, 500px" alt={currentAlbum.title || "Album Cover Image"} className="object-cover" />
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                       <Camera size={32} className="text-white" />
                     </div>
@@ -437,7 +437,7 @@ export default function GalleryPage() {
                   {currentAlbum?.media?.map((item) => (
                     <div key={item.id} className="relative aspect-square rounded-lg bg-gray-100 overflow-hidden group/media">
                       {item.type === 'image' ? (
-                        <Image src={item.url} fill sizes="100px" alt="Media" className="object-cover" />
+                        <Image src={item.url} fill sizes="100px" alt={currentAlbum.title ? `${currentAlbum.title} media` : "Gallery photo"} className="object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gray-200">
                           <Camera size={20} className="text-gray-400" />

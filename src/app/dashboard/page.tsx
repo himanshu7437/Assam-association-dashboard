@@ -9,9 +9,9 @@ import {
   TrendingUp, 
   Clock, 
   ChevronRight,
+  ChevronLeft,
   ArrowUpRight,
   ArrowDownRight,
-  User,
   Bell,
   X,
   Loader2
@@ -84,6 +84,10 @@ export default function DashboardOverview() {
   const [stats, setStats] = useState({ bookings: 0, notices: 0, members: 0 });
   const [loading, setLoading] = useState(true);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  
+  // Calendar Navigation State
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
     fetchDashboardData();
@@ -150,11 +154,7 @@ export default function DashboardOverview() {
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  const getCalendarDays = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth(); // Current month
-    
+  const getCalendarDays = (month: number, year: number) => {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const startPadding = firstDay.getDay(); // 0 is Sunday
@@ -163,22 +163,57 @@ export default function DashboardOverview() {
     const approvedBookings = bookings.filter(b => b.status === "approved");
     
     const days = [];
-    // Padding
+    // Padding from previous month
     for (let i = 0; i < startPadding; i++) {
       days.push({ day: null, booked: [] });
     }
-    // Days
+    // Days of the current month
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const dayBookings = approvedBookings.filter(b => b.date === dateStr).map(b => b.facility);
+      // Extract simplified information for multiple bookings on the same day
+      const dayBookings = approvedBookings
+        .filter(b => {
+          // Robust date comparison
+          if (!b.date) return false;
+          // Standardize date format for comparison (YYYY-MM-DD)
+          let bDate = b.date;
+          if (b.date.includes(',')) {
+            // Handle "Mar 27, 2026" format from localized strings
+            const parsedDate = new Date(b.date);
+            bDate = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`;
+          }
+          return bDate === dateStr;
+        })
+        .map(b => ({
+          id: b.id,
+          facility: b.facility
+        }));
       days.push({ day: d, booked: dayBookings });
     }
     
     return { year, month, days };
   };
 
-  const calendarData = getCalendarDays();
+  const calendarData = getCalendarDays(currentMonth, currentYear);
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(prev => prev - 1);
+    } else {
+      setCurrentMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(prev => prev + 1);
+    } else {
+      setCurrentMonth(prev => prev + 1);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -294,20 +329,6 @@ export default function DashboardOverview() {
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-            <h3 className="font-bold text-gray-900 mb-4">Support & Feedback</h3>
-            <div className="space-y-4">
-              <div className="flex items-center p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-indigo-100 transition-colors cursor-pointer group">
-                <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 mr-3">
-                  <User size={20} />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">IT Support</p>
-                  <p className="text-xs text-gray-400">Request technical help</p>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -316,10 +337,23 @@ export default function DashboardOverview() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
-              <h2 className="text-xl font-bold flex items-center text-gray-900">
-                <Calendar className="mr-2 text-indigo-600" />
-                {monthNames[calendarData.month]} {calendarData.year}
-              </h2>
+              <div className="flex items-center space-x-4">
+                <button 
+                  onClick={handlePrevMonth}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <h2 className="text-xl font-bold flex items-center text-gray-900 min-w-[150px] justify-center">
+                  {monthNames[calendarData.month]} {calendarData.year}
+                </h2>
+                <button 
+                  onClick={handleNextMonth}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
               <button 
                 onClick={() => setIsCalendarOpen(false)} 
                 className="p-1 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
@@ -341,7 +375,7 @@ export default function DashboardOverview() {
                   <div 
                     key={i} 
                     className={cn(
-                      "aspect-square rounded-xl flex flex-col items-center justify-center text-sm border transition-all p-1",
+                      "aspect-square rounded-xl flex flex-col items-start justify-start text-sm border transition-all p-1.5 overflow-hidden",
                       !item.day ? "border-transparent bg-transparent" :
                       item.booked.length > 0 
                         ? "bg-indigo-50 border-indigo-200 font-bold text-indigo-900 shadow-sm" 
@@ -349,17 +383,24 @@ export default function DashboardOverview() {
                     )}
                   >
                     {item.day && (
-                      <span className="mb-0.5">{item.day}</span>
+                      <span className="mb-1 text-xs">{item.day}</span>
                     )}
                     {item.booked.length > 0 && (
-                      <div className="flex gap-0.5 max-w-full flex-wrap justify-center mt-auto">
-                        {item.booked.map((fac, idx) => (
+                      <div className="flex flex-col gap-0.5 w-full overflow-y-auto no-scrollbar">
+                        {item.booked.slice(0, 2).map((booking, idx) => (
                           <div 
                             key={idx} 
-                            title={fac}
-                            className="w-1.5 h-1.5 rounded-full bg-indigo-500" 
-                          />
+                            title={booking.facility}
+                            className="text-[8px] leading-tight px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 truncate w-full border border-indigo-200"
+                          >
+                            {booking.facility}
+                          </div>
                         ))}
+                        {item.booked.length > 2 && (
+                          <div className="text-[7px] text-indigo-500 font-bold pl-1">
+                            +{item.booked.length - 2} more
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

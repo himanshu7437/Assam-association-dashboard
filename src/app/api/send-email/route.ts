@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     // Resend's default onboarding testing email
     const data = await resend.emails.send({
-      from: "Acme <onboarding@resend.dev>",
+      from: "Assam Association Delhi <info@assamassociationdelhi.org>",
       to: [userEmail || "test@example.com"],
       subject: subject,
       text: message,

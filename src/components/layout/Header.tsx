@@ -32,7 +32,7 @@ export default function Header({ onOpenSidebar }: HeaderProps) {
             {user?.photoURL ? (
               <Image 
                 src={user.photoURL} 
-                alt="Profile" 
+                alt={user.displayName || "Profile"} 
                 fill
                 sizes="40px" 
                 className="object-cover" 

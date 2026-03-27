@@ -34,6 +34,7 @@ export default function MembershipsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [memberships, setMemberships] = useState<MembershipSubmission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -74,12 +75,17 @@ export default function MembershipsPage() {
     });
   };
 
-  const filteredMemberships = memberships.filter(m => 
-    (m.fullName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || 
-    (m.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-    (m.phone?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-    (m.occupation?.toLowerCase() || "").includes(searchTerm.toLowerCase())
-  );
+  const filteredMemberships = memberships.filter(m => {
+    const searchTermLower = searchTerm.toLowerCase();
+    const searchMatch = (m.fullName?.toLowerCase() || "").includes(searchTermLower) || 
+                       (m.email?.toLowerCase() || "").includes(searchTermLower) ||
+                       (m.phone?.toLowerCase() || "").includes(searchTermLower) ||
+                       (m.occupation?.toLowerCase() || "").includes(searchTermLower);
+    
+    const statusMatch = statusFilter === "all" || m.status === statusFilter;
+
+    return searchMatch && statusMatch;
+  });
 
   const totalPages = Math.ceil(filteredMemberships.length / ITEMS_PER_PAGE);
   const paginatedMemberships = filteredMemberships.slice(
@@ -112,11 +118,19 @@ export default function MembershipsPage() {
             }}
           />
         </div>
-        <div className="flex items-center space-x-4">
-          <button className="flex items-center text-sm font-bold text-gray-600 hover:text-indigo-600 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50/50 hover:bg-white transition-all">
-            <Filter size={16} className="mr-2" />
-            More Filters
-          </button>
+        <div className="flex items-center space-x-3">
+          <select 
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="text-sm font-bold text-gray-600 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+          </select>
         </div>
       </div>
 

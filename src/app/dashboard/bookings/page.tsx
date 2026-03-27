@@ -10,12 +10,14 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Trash2,
+  Download
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc, deleteDoc } from "firebase/firestore";
 import { logActivity } from "@/lib/activity";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
@@ -46,7 +48,12 @@ export default function BookingsPage() {
   
   // Filtering & Pagination
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [facilityFilter, setFacilityFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Derived unique facilities for the filter dropdown
+  const facilities = Array.from(new Set(bookings.map(b => b.facility))).filter(Boolean);
 
   useEffect(() => {
     fetchBookings();
@@ -147,11 +154,76 @@ export default function BookingsPage() {
     }
   };
 
+  const handleDelete = async (id: string, facility: string, requestor: string) => {
+    if (!window.confirm(`Are you sure you want to delete the booking for "${facility}" by "${requestor}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const toastId = toast.loading("Deleting booking...");
+      await deleteDoc(doc(db, "bookings", id));
+      
+      const adminName = user?.email?.split('@')[0] || "Admin";
+      await logActivity("booking", adminName, `deleted booking for ${facility} by ${requestor}`, "error");
+
+      setBookings(bookings.filter(b => b.id !== id));
+      toast.success("Booking deleted successfully", { id: toastId });
+    } catch (error) {
+      console.error("Error deleting booking:", error);
+      toast.error("Failed to delete booking");
+    }
+  };
+
+  const handleExport = () => {
+    if (filteredBookings.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+
+    // Define CSV headers
+    const headers = ["S.No", "Requestor", "Email", "Phone", "Facility", "Date", "Status", "Amount", "Message"];
+    
+    // Convert data to CSV rows
+    const rows = filteredBookings.map((b, index) => [
+      index + 1,
+      `"${(b.user || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.userEmail || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.phone || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.facility || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.date || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.status || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.amount || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.message || "").toString().replace(/"/g, '""').replace(/\r?\n|\r/g, " ")}"`
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.join(","))
+    ].join("\n");
+
+    // Create a blob and trigger download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bookings_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Exported successfully");
+  };
+
   const filteredBookings = bookings.filter(b => {
     const searchTermLower = searchTerm.toLowerCase();
     const userMatch = b.user ? String(b.user).toLowerCase().includes(searchTermLower) : false;
     const facilityMatch = b.facility ? String(b.facility).toLowerCase().includes(searchTermLower) : false;
-    return userMatch || facilityMatch;
+    
+    const statusMatch = statusFilter === "all" || b.status === statusFilter;
+    const facilityFilterMatch = facilityFilter === "all" || b.facility === facilityFilter;
+
+    return (userMatch || facilityMatch) && statusMatch && facilityFilterMatch;
   });
 
   const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE);
@@ -167,6 +239,13 @@ export default function BookingsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Booking Management</h1>
           <p className="text-gray-500 text-sm mt-1">Review and manage facility booking requests from the public.</p>
         </div>
+        <button 
+          onClick={handleExport}
+          className="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm shadow-indigo-100"
+        >
+          <Download size={18} className="mr-2" />
+          Export Data
+        </button>
       </div>
 
       <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -185,11 +264,35 @@ export default function BookingsPage() {
             }}
           />
         </div>
-        <div className="flex items-center space-x-4">
-          <button className="flex items-center text-sm font-bold text-gray-600 hover:text-indigo-600 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50/50 hover:bg-white transition-all">
-            <Filter size={16} className="mr-2" />
-            More Filters
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <select 
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="text-sm font-bold text-gray-600 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          <select 
+            value={facilityFilter}
+            onChange={(e) => {
+              setFacilityFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="text-sm font-bold text-gray-600 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Facilities</option>
+            {facilities.map(f => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -256,26 +359,33 @@ export default function BookingsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {booking.status === 'pending' ? (
-                        <div className="flex items-center justify-end space-x-2">
-                          <button 
-                            onClick={() => handleStatusChange(booking, 'approved')}
-                            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors border border-transparent hover:border-green-100"
-                            title="Approve"
-                          >
-                            <CheckCircle2 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => handleStatusChange(booking, 'rejected')}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                            title="Reject"
-                          >
-                            <XCircle size={18} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400 font-medium italic pr-2">Resolved</span>
-                      )}
+                      <div className="flex items-center justify-end space-x-2">
+                        {booking.status === 'pending' && (
+                          <>
+                            <button 
+                              onClick={() => handleStatusChange(booking, 'approved')}
+                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors border border-transparent hover:border-green-100"
+                              title="Approve"
+                            >
+                              <CheckCircle2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => handleStatusChange(booking, 'rejected')}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                              title="Reject"
+                            >
+                              <XCircle size={18} />
+                            </button>
+                          </>
+                        )}
+                        <button 
+                          onClick={() => handleDelete(booking.id, booking.facility, booking.user)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

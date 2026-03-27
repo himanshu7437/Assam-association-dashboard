@@ -15,7 +15,8 @@ import {
   ExternalLink,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Search
 } from "lucide-react";
 import Image from "next/image";
 import { clsx, type ClassValue } from "clsx";
@@ -42,6 +43,8 @@ const ITEMS_PER_PAGE = 7; // 7 members + 1 add card = 8 total per view
 export default function CommitteePage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentMember, setCurrentMember] = useState<Member | null>(null);
@@ -124,6 +127,16 @@ export default function CommitteePage() {
     }
   };
 
+  const filteredMembers = members.filter(m => {
+    const searchTermLower = searchTerm.toLowerCase();
+    const searchMatch = (m.fullName?.toLowerCase() || "").includes(searchTermLower) || 
+                       (m.role?.toLowerCase() || "").includes(searchTermLower);
+    
+    const roleMatch = roleFilter === "all" || m.role === roleFilter;
+
+    return searchMatch && roleMatch;
+  });
+
   const saveMember = async () => {
     if (!currentMember?.fullName || !currentMember?.role) {
       toast.error("Name and Role are required");
@@ -150,9 +163,11 @@ export default function CommitteePage() {
     }
   };
 
-  const totalPages = Math.ceil((members.length + 1) / ITEMS_PER_PAGE);
+  const roles = Array.from(new Set(members.map(m => m.role))).filter(Boolean);
+
+  const totalPages = Math.ceil((filteredMembers.length + 1) / ITEMS_PER_PAGE);
   const paginatedItems = () => {
-    const blendedArray = [...members, "ADD_CARD" as const];
+    const blendedArray = [...filteredMembers, "ADD_CARD" as const];
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return blendedArray.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   };
@@ -160,17 +175,47 @@ export default function CommitteePage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Committee Management</h1>
           <p className="text-gray-500 text-sm mt-1">Manage the executive committee members and their profiles.</p>
         </div>
-        <button 
-          onClick={() => openModal()}
-          className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all duration-200 shadow-sm"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Member
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-64">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              placeholder="Search members..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+          <select 
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="text-sm font-bold text-gray-600 border border-gray-200 px-3 py-2 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Roles</option>
+            {roles.map(r => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <button 
+            onClick={() => openModal()}
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all duration-200 shadow-sm whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Member
+          </button>
+        </div>
       </div>
 
       {/* Hidden File Input */}
@@ -212,7 +257,7 @@ export default function CommitteePage() {
                     <div className="relative inline-block">
                       <div className="h-24 w-24 rounded-full overflow-hidden ring-4 ring-indigo-50 shadow-inner mx-auto mb-4 relative">
                         {member.image ? (
-                          <Image src={member.image} alt={member.fullName} fill sizes="48px" className="object-cover" />
+                          <Image src={member.image} alt={member.fullName || "Member"} fill sizes="48px" className="object-cover" />
                         ) : (
                           <div className="h-full w-full bg-gray-100 flex items-center justify-center text-gray-400">
                             <User size={40} />
@@ -327,7 +372,7 @@ export default function CommitteePage() {
                   {isUploading ? (
                     <Loader2 size={32} className="animate-spin text-indigo-600" />
                   ) : currentMember?.image ? (
-                    <Image src={currentMember.image} fill sizes="128px" alt="Member" className="object-cover" />
+                    <Image src={currentMember.image} fill sizes="128px" alt={currentMember.fullName || "Member"} className="object-cover" />
                   ) : (
                     <User size={32} />
                   )}
