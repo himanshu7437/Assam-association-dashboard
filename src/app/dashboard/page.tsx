@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Users, 
   Calendar, 
@@ -8,18 +8,19 @@ import {
   MessageSquare, 
   TrendingUp, 
   Clock, 
-  CheckCircle2, 
-  AlertCircle,
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
   User,
-  Bell
+  Bell,
+  X,
+  Loader2
 } from "lucide-react";
-import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -27,9 +28,9 @@ function cn(...inputs: ClassValue[]) {
 
 interface StatCardProps {
   title: string;
-  value: string;
+  value: string | number;
   change: string;
-  trend: "up" | "down";
+  trend: "up" | "down" | "neutral";
   icon: React.ReactNode;
   color: string;
 }
@@ -41,13 +42,15 @@ function StatCard({ title, value, change, trend, icon, color }: StatCardProps) {
         <div className={cn("p-3 rounded-xl", color)}>
           {icon}
         </div>
-        <div className={cn(
-          "flex items-center text-sm font-bold",
-          trend === "up" ? "text-green-600" : "text-red-600"
-        )}>
-          {trend === "up" ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-          <span className="ml-1">{change}</span>
-        </div>
+        {trend !== "neutral" && (
+          <div className={cn(
+            "flex items-center text-sm font-bold",
+            trend === "up" ? "text-green-600" : "text-red-600"
+          )}>
+            {trend === "up" ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+            <span className="ml-1">{change}</span>
+          </div>
+        )}
       </div>
       <div>
         <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">{title}</p>
@@ -59,23 +62,123 @@ function StatCard({ title, value, change, trend, icon, color }: StatCardProps) {
 
 interface Activity {
   id: string;
-  type: 'booking' | 'notice' | 'document' | 'message';
+  type: 'booking' | 'notice' | 'document' | 'message' | 'system';
   user: string;
   action: string;
-  time: string;
-  status?: 'success' | 'warning' | 'info';
+  createdAt: any;
+  status?: 'success' | 'warning' | 'info' | 'error';
 }
 
-const recentActivities: Activity[] = [
-  { id: "1", type: "booking", user: "Rahul Sharma", action: "requested a new Bhawan booking", time: "2 hours ago", status: "info" },
-  { id: "2", type: "notice", user: "Admin", action: "published Annual Meeting notice", time: "5 hours ago", status: "success" },
-  { id: "3", type: "document", user: "Admin", action: "uploaded 2023 financial report", time: "Yesterday", status: "success" },
-  { id: "4", type: "message", user: "Sunita Gogoi", action: "sent a membership query", time: "2 days ago", status: "warning" },
-  { id: "5", type: "booking", user: "Bikash Das", action: "cancelled Guest House booking", time: "3 days ago", status: "warning" },
-];
+interface Booking {
+  id: string;
+  date: string;
+  status: string;
+  facility: string;
+}
 
 export default function DashboardOverview() {
   const { user } = useAuth();
+  
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [stats, setStats] = useState({ bookings: 0, notices: 0, members: 0 });
+  const [loading, setLoading] = useState(true);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch Recent Activities
+      const activitiesSnap = await getDocs(query(collection(db, "activities"), orderBy("createdAt", "desc"), limit(6)));
+      const acts = activitiesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Activity[];
+      setActivities(acts);
+
+      // Fetch Bookings for Calendar & Stats
+      const bookingsSnap = await getDocs(collection(db, "bookings"));
+      const bks = bookingsSnap.docs.map(doc => {
+        const data = doc.data();
+        let dateStr = "";
+        if (data.date) {
+            if (typeof data.date.toDate === 'function') {
+                const theDate = data.date.toDate();
+                dateStr = `${theDate.getFullYear()}-${String(theDate.getMonth() + 1).padStart(2, '0')}-${String(theDate.getDate()).padStart(2, '0')}`;
+            } else {
+                dateStr = String(data.date);
+            }
+        }
+        return { 
+          id: doc.id, 
+          ...data,
+          date: dateStr 
+        };
+      }) as Booking[];
+      setBookings(bks);
+
+      // Fetch Notices Stats
+      const noticesSnap = await getDocs(collection(db, "notices"));
+      
+      // Fetch Committee Stats
+      const committeeSnap = await getDocs(collection(db, "committee"));
+
+      setStats({
+        bookings: bks.length,
+        notices: noticesSnap.size,
+        members: committeeSnap.size
+      });
+      
+    } catch (error) {
+      console.error("Dashboard data error", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRelativeTime = (timestamp: any) => {
+    if (!timestamp) return "Just now";
+    const now = new Date();
+    const past = timestamp.toDate();
+    const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  };
+
+  const getCalendarDays = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth(); // Current month
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startPadding = firstDay.getDay(); // 0 is Sunday
+    const daysInMonth = lastDay.getDate();
+
+    const approvedBookings = bookings.filter(b => b.status === "approved");
+    
+    const days = [];
+    // Padding
+    for (let i = 0; i < startPadding; i++) {
+      days.push({ day: null, booked: [] });
+    }
+    // Days
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayBookings = approvedBookings.filter(b => b.date === dateStr).map(b => b.facility);
+      days.push({ day: d, booked: dayBookings });
+    }
+    
+    return { year, month, days };
+  };
+
+  const calendarData = getCalendarDays();
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
   return (
     <div className="space-y-8">
@@ -87,7 +190,7 @@ export default function DashboardOverview() {
         </div>
         <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
           <Clock className="text-indigo-600 h-4 w-4" />
-          <span className="text-sm font-bold text-gray-600">March 20, 2024</span>
+          <span className="text-sm font-bold text-gray-600">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
         </div>
       </div>
 
@@ -95,71 +198,84 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Total Bookings" 
-          value="128" 
-          change="+12%" 
-          trend="up" 
+          value={loading ? "..." : stats.bookings} 
+          change="Live" 
+          trend="neutral" 
           icon={<Calendar className="text-white h-6 w-6" />}
           color="bg-indigo-600"
         />
         <StatCard 
           title="Active Notices" 
-          value="12" 
-          change="+2" 
-          trend="up" 
+          value={loading ? "..." : stats.notices} 
+          change="Live" 
+          trend="neutral" 
           icon={<Bell className="text-white h-6 w-6" />}
           color="bg-amber-500"
         />
         <StatCard 
-          title="New Messages" 
-          value="45" 
-          change="-5%" 
-          trend="down" 
-          icon={<MessageSquare className="text-white h-6 w-6" />}
-          color="bg-emerald-500"
-        />
-        <StatCard 
           title="Total Members" 
-          value="1.2k" 
-          change="+4%" 
-          trend="up" 
+          value={loading ? "..." : stats.members} 
+          change="Live" 
+          trend="neutral" 
           icon={<Users className="text-white h-6 w-6" />}
           color="bg-blue-600"
+        />
+        <StatCard 
+          title="System Health" 
+          value="100%" 
+          change="Online" 
+          trend="neutral" 
+          icon={<TrendingUp className="text-white h-6 w-6" />}
+          color="bg-emerald-500"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Activity */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[400px]">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="font-bold text-gray-900 flex items-center">
               <TrendingUp className="mr-2 text-indigo-600 h-5 w-5" />
-              Recent Activity
+              Recent System Activity
             </h3>
-            <button className="text-xs font-bold text-indigo-600 hover:underline">View All</button>
           </div>
-          <div className="divide-y divide-gray-50">
-            {recentActivities.map((activity) => (
-              <div key={activity.id} className="px-6 py-4 flex items-center hover:bg-gray-50/50 transition-colors">
-                <div className={cn(
-                  "h-10 w-10 rounded-xl flex items-center justify-center mr-4",
-                  activity.type === 'booking' ? "bg-blue-50 text-blue-600" :
-                  activity.type === 'notice' ? "bg-amber-50 text-amber-600" :
-                  activity.type === 'document' ? "bg-purple-50 text-purple-600" : "bg-emerald-50 text-emerald-600"
-                )}>
-                  {activity.type === 'booking' ? <Calendar size={18} /> :
-                   activity.type === 'notice' ? <Bell size={18} /> :
-                   activity.type === 'document' ? <FileText size={18} /> : <MessageSquare size={18} />}
+          
+          {loading ? (
+             <div className="flex items-center justify-center p-12">
+               <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+             </div>
+          ) : activities.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">
+              <p className="font-bold">No recent activities</p>
+              <p className="text-sm">System actions will appear here automatically.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {activities.map((activity) => (
+                <div key={activity.id} className="px-6 py-4 flex items-center hover:bg-gray-50/50 transition-colors">
+                  <div className={cn(
+                    "h-10 w-10 rounded-xl flex items-center justify-center mr-4 shrink-0",
+                    activity.type === 'booking' ? "bg-blue-50 text-blue-600" :
+                    activity.type === 'notice' ? "bg-amber-50 text-amber-600" :
+                    activity.type === 'document' ? "bg-purple-50 text-purple-600" : 
+                    activity.type === 'system' ? "bg-indigo-50 text-indigo-600" : "bg-emerald-50 text-emerald-600"
+                  )}>
+                    {activity.type === 'booking' ? <Calendar size={18} /> :
+                     activity.type === 'notice' ? <Bell size={18} /> :
+                     activity.type === 'document' ? <FileText size={18} /> :
+                     activity.type === 'system' ? <TrendingUp size={18} /> : <MessageSquare size={18} />}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-bold text-gray-900">{activity.user}</span> {activity.action}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{getRelativeTime(activity.createdAt)}</p>
+                  </div>
+                  <ChevronRight className="text-gray-300 h-4 w-4 shrink-0 hidden sm:block" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-bold text-gray-900">{activity.user}</span> {activity.action}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{activity.time}</p>
-                </div>
-                <ChevronRight className="text-gray-300 h-4 w-4" />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quick Actions / Summary */}
@@ -169,8 +285,13 @@ export default function DashboardOverview() {
               <Calendar size={160} />
             </div>
             <h3 className="text-lg font-bold mb-2">Hall Availability</h3>
-            <p className="text-indigo-100 text-sm mb-4">Srimanta Sankaradeva Bhawan is 85% booked for April 2024.</p>
-            <button className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold active:scale-95 transition-all">Check Calendar</button>
+            <p className="text-indigo-100 text-sm mb-4">You have {bookings.filter(b => b.status === "approved").length} approved bookings inside the database.</p>
+            <button 
+              onClick={() => setIsCalendarOpen(true)}
+              className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold active:scale-95 transition-all w-full text-center relative z-10"
+            >
+              Check Calendar
+            </button>
           </div>
 
           <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
@@ -189,6 +310,70 @@ export default function DashboardOverview() {
           </div>
         </div>
       </div>
+
+      {/* Calendar Modal */}
+      {isCalendarOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+              <h2 className="text-xl font-bold flex items-center text-gray-900">
+                <Calendar className="mr-2 text-indigo-600" />
+                {monthNames[calendarData.month]} {calendarData.year}
+              </h2>
+              <button 
+                onClick={() => setIsCalendarOpen(false)} 
+                className="p-1 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-7 gap-2 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider py-2">
+                    {d}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-2">
+                {calendarData.days.map((item, i) => (
+                  <div 
+                    key={i} 
+                    className={cn(
+                      "aspect-square rounded-xl flex flex-col items-center justify-center text-sm border transition-all p-1",
+                      !item.day ? "border-transparent bg-transparent" :
+                      item.booked.length > 0 
+                        ? "bg-indigo-50 border-indigo-200 font-bold text-indigo-900 shadow-sm" 
+                        : "bg-white border-gray-100 text-gray-600 hover:border-indigo-200"
+                    )}
+                  >
+                    {item.day && (
+                      <span className="mb-0.5">{item.day}</span>
+                    )}
+                    {item.booked.length > 0 && (
+                      <div className="flex gap-0.5 max-w-full flex-wrap justify-center mt-auto">
+                        {item.booked.map((fac, idx) => (
+                          <div 
+                            key={idx} 
+                            title={fac}
+                            className="w-1.5 h-1.5 rounded-full bg-indigo-500" 
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 flex items-center justify-center space-x-4 text-xs font-bold text-gray-500">
+                <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-indigo-500 mr-2"></div> Booked Facility</div>
+                <div className="flex items-center"><div className="w-3 h-3 rounded-full border border-gray-200 mr-2"></div> Available</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

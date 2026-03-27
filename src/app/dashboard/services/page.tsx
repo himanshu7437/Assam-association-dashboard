@@ -1,23 +1,26 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Plus, 
   Trash2, 
   Edit2, 
   Camera, 
   X,
-  Clock,
-  ExternalLink,
-  Save,
   Loader2,
-  Upload
+  Upload,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import Image from "next/image";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { toast } from "react-hot-toast";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { db } from "@/lib/firebase";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { logActivity } from "@/lib/activity";
+import { useAuth } from "@/context/AuthContext";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -30,50 +33,71 @@ interface Service {
   image: string;
   category: "Facility" | "Service" | "Accommodation";
   price?: string;
+  createdAt?: any;
 }
 
-const initialServices: Service[] = [
-  { 
-    id: "1", 
-    name: "Srimanta Sankaradeva Bhawan Auditorium", 
-    description: "Multi-purpose auditorium with 500+ seating capacity, fully air-conditioned with modern sound systems.", 
-    image: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=800", 
-    category: "Facility",
-    price: "₹15,000 / day"
-  },
-  { 
-    id: "2", 
-    name: "Guest House Rooms", 
-    description: "Comfortable accommodation for visitors with attached toilets, geysers, and meal services.", 
-    image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=800", 
-    category: "Accommodation",
-    price: "₹1,200 / night"
-  },
-  { 
-    id: "3", 
-    name: "Library & Research Center", 
-    description: "Extensive collection of books on Assamese culture, history, and Sankaradeva's philosophy.", 
-    image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&q=80&w=800", 
-    category: "Service"
-  },
-];
+const ITEMS_PER_PAGE = 5;
 
 export default function ServicesPage() {
-  const [services, setServices] = useState<Service[]>(initialServices);
+  const { user } = useAuth();
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentService, setCurrentService] = useState<Partial<Service> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDelete = (id: string) => {
+  useEffect(() => {
+    fetchServices();
+  }, []);
+
+  const fetchServices = async () => {
+    try {
+      setLoading(true);
+      const querySnapshot = await getDocs(collection(db, "services"));
+      const docsList = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Service[];
+      
+      // Sort by creation or fallback to name
+      docsList.sort((a, b) => {
+        if (a.createdAt && b.createdAt) {
+          return b.createdAt.toMillis() - a.createdAt.toMillis();
+        }
+        return a.name.localeCompare(b.name);
+      });
+      
+      setServices(docsList);
+    } catch (error) {
+      console.error("Error fetching services:", error);
+      toast.error("Failed to load services");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
     if (confirm("Are you sure you want to delete this service/facility entry?")) {
-      setServices(services.filter(s => s.id !== id));
-      toast.success("Entry removed");
+      try {
+        await deleteDoc(doc(db, "services", id));
+        setServices(services.filter(s => s.id !== id));
+        
+        await logActivity("system", user?.email?.split('@')[0] || "Admin", `deleted facility: ${name}`, "warning");
+        toast.success("Entry removed");
+      } catch (error) {
+        console.error("Error deleting service:", error);
+        toast.error("Failed to delete entry");
+      }
     }
   };
 
   const openModal = (service: Service | null = null) => {
-    setCurrentService(service || { name: "", description: "", image: "", category: "Facility" });
+    setCurrentService(service || { name: "", description: "", image: "", category: "Facility", price: "" });
     setIsModalOpen(true);
   };
 
@@ -100,21 +124,47 @@ export default function ServicesPage() {
     }
   };
 
-  const saveService = () => {
+  const saveService = async () => {
     if (!currentService?.name || !currentService?.image) {
       toast.error("Name and Image are required");
       return;
     }
 
-    if (currentService.id) {
-      setServices(services.map(s => s.id === currentService.id ? currentService as Service : s));
-      toast.success("Service updated");
-    } else {
-      const newService = { ...currentService, id: Date.now().toString() } as Service;
-      setServices([...services, newService]);
-      toast.success("New service added");
+    try {
+      const adminName = user?.email?.split('@')[0] || "Admin";
+
+      if (currentService.id) {
+        const docRef = doc(db, "services", currentService.id);
+        const { id, ...updateData } = currentService;
+        await updateDoc(docRef, updateData as any);
+        
+        await logActivity("system", adminName, `updated facility: ${currentService.name}`, "info");
+        toast.success("Service updated");
+      } else {
+        const newDoc = {
+          ...currentService,
+          createdAt: serverTimestamp()
+        };
+        await addDoc(collection(db, "services"), newDoc);
+        
+        await logActivity("system", adminName, `added new facility: ${currentService.name}`, "success");
+        toast.success("New service added");
+      }
+      setIsModalOpen(false);
+      fetchServices();
+    } catch (error) {
+      console.error("Error saving service:", error);
+      toast.error("Failed to save service");
     }
-    setIsModalOpen(false);
+  };
+
+  // Pagination Logic
+  const totalPages = Math.ceil((services.length + 1) / ITEMS_PER_PAGE); // +1 is for the "Add Card"
+  const paginatedItems = () => {
+    // Array includes all real services plus a placeholder "ADD_CARD"
+    const blendedArray = [...services, "ADD_CARD" as const];
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return blendedArray.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   };
 
   return (
@@ -141,68 +191,127 @@ export default function ServicesPage() {
         onChange={handleImageUpload}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {services.map((service) => (
-          <div key={service.id} className="group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col">
-            <div className="relative h-48 w-full bg-gray-100">
-              <Image 
-                src={service.image} 
-                alt={service.name} 
-                fill 
-                className="object-cover group-hover:scale-105 transition-transform duration-500" 
-              />
-              <div className="absolute top-4 left-4">
-                <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[10px] font-bold text-indigo-600 uppercase tracking-widest rounded-full shadow-sm">
-                  {service.category}
-                </span>
-              </div>
-            </div>
-            
-            <div className="p-6 flex-1 flex flex-col">
-              <h3 className="text-lg font-bold text-gray-900 mb-2 leading-tight">{service.name}</h3>
-              <p className="text-sm text-gray-500 mb-4 line-clamp-3">{service.description}</p>
-              
-              <div className="mt-auto flex items-center justify-between pt-4 border-t border-gray-50">
-                <div className="text-sm font-bold text-indigo-600">
-                  {service.price || "Free Service"}
-                </div>
-                <div className="flex items-center space-x-2">
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 min-h-[400px]">
+            {paginatedItems().map((item, index) => {
+              if (item === "ADD_CARD") {
+                return (
                   <button 
-                    onClick={() => openModal(service)}
-                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-50 rounded-lg transition-all"
+                    key="add-card"
+                    onClick={() => openModal()}
+                    className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50 hover:bg-gray-100 hover:border-indigo-300 transition-all duration-300 group min-h-[300px]"
                   >
-                    <Edit2 size={16} />
+                    <div className="p-4 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform duration-300 mb-4 text-indigo-600">
+                      <Plus size={32} />
+                    </div>
+                    <span className="text-sm font-bold text-gray-500 group-hover:text-indigo-600">Add Service / Facility</span>
                   </button>
-                  <button 
-                    onClick={() => handleDelete(service.id)}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-all"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+                );
+              }
 
-        {/* Create Card */}
-        <button 
-          onClick={() => openModal()}
-          className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50 hover:bg-gray-100 hover:border-indigo-300 transition-all duration-300 group min-h-[300px]"
-        >
-          <div className="p-4 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform duration-300 mb-4 text-indigo-600">
-            <Plus size={32} />
+              const service = item as Service;
+              return (
+                <div key={service.id || index} className="group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col">
+                  <div className="relative h-48 w-full bg-gray-100">
+                    <Image 
+                      src={service.image} 
+                      alt={service.name} 
+                      fill 
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-500" 
+                    />
+                    <div className="absolute top-4 left-4">
+                      <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[10px] font-bold text-indigo-600 uppercase tracking-widest rounded-full shadow-sm">
+                        {service.category}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6 flex-1 flex flex-col">
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 leading-tight">{service.name}</h3>
+                    <p className="text-sm text-gray-500 mb-4 line-clamp-3">{service.description}</p>
+                    
+                    <div className="mt-auto flex items-center justify-between pt-4 border-t border-gray-50">
+                      <div className="text-sm font-bold text-indigo-600">
+                        {service.price || "Free Service"}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => openModal(service)}
+                          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-50 rounded-lg transition-all"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(service.id, service.name)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <span className="text-sm font-bold text-gray-500 group-hover:text-indigo-600">Add Service / Facility</span>
-        </button>
-      </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white px-6 py-4 rounded-xl border border-gray-100 shadow-sm">
+              <p className="text-sm text-gray-500 font-medium">
+                Showing <span className="font-bold text-gray-900">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to <span className="font-bold text-gray-900">{Math.min(currentPage * ITEMS_PER_PAGE, services.length + 1)}</span> of <span className="font-bold text-gray-900">{services.length + 1}</span> items
+              </p>
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 border border-gray-200 rounded-lg bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                {Array.from({ length: totalPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={cn(
+                      "w-8 h-8 flex items-center justify-center border rounded-lg text-sm font-bold transition-colors",
+                      currentPage === i + 1 
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-600" 
+                        : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    )}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button 
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 border border-gray-200 rounded-lg bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 my-8">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-indigo-600 text-white">
               <h2 className="text-xl font-bold">{currentService?.id ? "Edit Facility" : "Add Facility"}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+              <button 
+                onClick={() => setIsModalOpen(false)} 
+                disabled={isUploading}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors"
+              >
                 <X className="h-6 w-6" />
               </button>
             </div>
@@ -218,7 +327,7 @@ export default function ServicesPage() {
                   <Loader2 size={32} className="animate-spin text-indigo-600" />
                 ) : currentService?.image ? (
                   <>
-                    <Image src={currentService.image} fill alt="Service" className="object-cover" />
+                    <Image src={currentService.image} fill sizes="(max-width: 768px) 100vw, 500px" alt="Service" className="object-cover" />
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                       <Camera size={32} className="text-white" />
                     </div>
@@ -256,6 +365,16 @@ export default function ServicesPage() {
                 </div>
               </div>
               <div className="space-y-1">
+                <label className="text-sm font-bold text-gray-700">Price (Optional)</label>
+                <input 
+                  type="text" 
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="e.g. ₹15,000 / day"
+                  value={currentService?.price || ""}
+                  onChange={(e) => setCurrentService({ ...currentService, price: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
                 <label className="text-sm font-bold text-gray-700">Description</label>
                 <textarea 
                   className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none h-24"
@@ -268,7 +387,8 @@ export default function ServicesPage() {
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end space-x-3">
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors"
+                disabled={isUploading}
+                className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors shrink-0"
               >
                 Cancel
               </button>

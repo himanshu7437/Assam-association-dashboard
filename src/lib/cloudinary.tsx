@@ -27,7 +27,7 @@ export const uploadToCloudinary = async (file: File): Promise<string> => {
 
   try {
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
       {
         method: "POST",
         body: formData,
@@ -41,9 +41,12 @@ export const uploadToCloudinary = async (file: File): Promise<string> => {
 
     const data: CloudinaryUploadResponse = await response.json();
     
-    // Apply automatic optimization to the returned URL
-    // We replace '/upload/' with '/upload/f_auto,q_auto/'
-    const optimizedUrl = data.secure_url.replace("/upload/", "/upload/f_auto,q_auto/");
+    // Apply automatic optimization to the returned URL for images
+    // Note: f_auto,q_auto might not apply to PDFs, but Cloudinary safely ignores it
+    let optimizedUrl = data.secure_url;
+    if (data.resource_type === "image") {
+      optimizedUrl = data.secure_url.replace("/upload/", "/upload/f_auto,q_auto/");
+    }
     
     return optimizedUrl;
   } catch (error) {
