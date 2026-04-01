@@ -13,6 +13,7 @@ import {
   Check,
   Loader2,
   Upload,
+  Image as ImageIcon,
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
@@ -36,6 +37,7 @@ interface Notice {
   pinned: boolean;
   hasPdf: boolean;
   pdfUrl?: string;
+  thumbnailUrl?: string;
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -48,7 +50,9 @@ export default function NoticesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentNotice, setCurrentNotice] = useState<Partial<Notice> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchNotices();
@@ -116,7 +120,8 @@ export default function NoticesPage() {
       date: new Date().toISOString().split('T')[0], 
       pinned: false, 
       hasPdf: false,
-      pdfUrl: ""
+      pdfUrl: "",
+      thumbnailUrl: ""
     });
     setIsModalOpen(true);
   };
@@ -152,6 +157,34 @@ export default function NoticesPage() {
       toast.error("Failed to upload PDF");
     } finally {
       setIsUploading(false);
+    }
+  };
+  
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file");
+      return;
+    }
+
+    try {
+      setIsImageUploading(true);
+      const toastId = toast.loading("Uploading Thumbnail...");
+      
+      const imageUrl = await uploadToCloudinary(file);
+      
+      if (currentNotice) {
+        setCurrentNotice({ ...currentNotice, thumbnailUrl: imageUrl });
+      }
+      
+      toast.success("Thumbnail uploaded successfully!", { id: toastId });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload image");
+    } finally {
+      setIsImageUploading(false);
     }
   };
 
@@ -233,6 +266,14 @@ export default function NoticesPage() {
         accept="application/pdf"
         onChange={handleFileUpload}
       />
+      
+      <input 
+        type="file" 
+        ref={imageInputRef} 
+        className="hidden" 
+        accept="image/*"
+        onChange={handleImageUpload}
+      />
 
       {loading ? (
         <div className="flex justify-center items-center h-64">
@@ -297,23 +338,24 @@ export default function NoticesPage() {
                 )}
               </div>
 
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex items-center justify-between mt-auto">
                 <div className="flex items-center text-xs text-gray-400 font-medium">
                   <Calendar size={14} className="mr-1.5" />
                   {notice.date}
                 </div>
-                {notice.hasPdf && notice.pdfUrl && (
-                  <a href={notice.pdfUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-colors px-2 py-1 rounded-md">
-                    <FileText size={14} className="mr-1" />
-                    View PDF
-                  </a>
-                )}
-                {notice.hasPdf && !notice.pdfUrl && (
-                  <div className="flex items-center text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded-md">
-                    <FileText size={14} className="mr-1" />
-                    PDF Att.
-                  </div>
-                )}
+                <div className="flex items-center space-x-2">
+                  {notice.hasPdf && notice.pdfUrl && (
+                    <a href={notice.pdfUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-colors px-2 py-1 rounded-md">
+                      <FileText size={14} className="mr-1" />
+                      PDF
+                    </a>
+                  )}
+                  {notice.thumbnailUrl && (
+                    <div className="w-8 h-8 rounded-lg border border-indigo-100 overflow-hidden shadow-sm flex-shrink-0">
+                      <img src={notice.thumbnailUrl} alt="Thumb" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -442,6 +484,43 @@ export default function NoticesPage() {
 
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                      <ImageIcon size={20} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-900 truncate">Notice Thumbnail</p>
+                      <p className="text-xs text-gray-500">
+                        {currentNotice?.thumbnailUrl ? "Thumbnail uploaded" : "No cover image"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2">
+                    {currentNotice?.thumbnailUrl && (
+                      <div className="relative group/thumb">
+                        <div className="w-10 h-10 rounded-lg border border-indigo-100 overflow-hidden shadow-sm">
+                          <img src={currentNotice.thumbnailUrl} alt="Preview" className="w-full h-full object-cover" />
+                        </div>
+                        <button 
+                          onClick={() => handleInputChange("thumbnailUrl", "")}
+                          className="absolute -top-1.5 -right-1.5 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-sm transition-all"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    )}
+                    <button 
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={isImageUploading || isUploading}
+                      className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center disabled:opacity-50 h-fit self-center"
+                    >
+                      {isImageUploading ? <Loader2 size={14} className="animate-spin mr-1" /> : <Upload size={14} className="mr-1" />}
+                      {currentNotice?.thumbnailUrl ? "Replace" : "Upload"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
                     <div className="p-2 bg-red-100 text-red-600 rounded-lg">
                       <FileText size={20} />
                     </div>
@@ -463,7 +542,7 @@ export default function NoticesPage() {
                     )}
                     <button 
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
+                      disabled={isUploading || isImageUploading}
                       className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center disabled:opacity-50"
                     >
                       {isUploading ? <Loader2 size={14} className="animate-spin mr-1" /> : <Upload size={14} className="mr-1" />}

@@ -36,8 +36,25 @@ interface DocumentItem {
   url?: string;
 }
 
-const CATEGORIES = ["All Documents", "Reports", "Forms", "Legal", "Administrative", "Other"];
-const YEARS = ["All Years", "2024-25", "2023-24", "2022-23", "2021-22"];
+const CATEGORIES = [
+  "All Documents",
+  "Constitution Registration Certificate",
+  "Fire Licence Complition Certificate",
+  "Members Directory",
+  "Minutes of AGM/ GBM",
+  "Audited Reports",
+  "Membership Form"
+];
+const generateFinancialYears = () => {
+  const currentYear = new Date().getFullYear();
+  const years = ["All Years"];
+  for (let year = currentYear; year >= 2010; year--) {
+    years.push(`${year}-${String(year + 1).slice(-2)}`);
+  }
+  return years;
+};
+
+const YEARS = generateFinancialYears();
 const ITEMS_PER_PAGE = 5;
 
 export default function DocumentsPage() {
@@ -97,8 +114,8 @@ export default function DocumentsPage() {
   const openModal = (document: DocumentItem | null = null) => {
     setCurrentDoc(document || { 
       name: "", 
-      category: "Reports", 
-      year: "2024-25", 
+      category: "Constitution Registration Certificate", 
+      year: YEARS[1], 
       date: new Date().toISOString().split('T')[0],
       size: "0 MB",
       url: "" 
@@ -441,7 +458,7 @@ export default function DocumentsPage() {
                   <label className="text-sm font-bold text-gray-700">Category</label>
                   <select 
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={currentDoc?.category || "Reports"}
+                    value={currentDoc?.category || "Constitution Registration Certificate"}
                     onChange={(e) => handleInputChange("category", e.target.value)}
                   >
                     {CATEGORIES.filter(c => c !== "All Documents").map(cat => (
@@ -453,7 +470,7 @@ export default function DocumentsPage() {
                   <label className="text-sm font-bold text-gray-700">Financial Year</label>
                   <select 
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    value={currentDoc?.year || "2024-25"}
+                    value={currentDoc?.year || YEARS[1]}
                     onChange={(e) => handleInputChange("year", e.target.value)}
                   >
                     {YEARS.filter(y => y !== "All Years").map(year => (
