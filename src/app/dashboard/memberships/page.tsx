@@ -12,8 +12,7 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
-  Loader2,
-  Filter
+  Loader2
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -46,7 +45,7 @@ export default function MembershipsPage() {
       setLoading(true);
       const data = await getMemberships();
       setMemberships(data);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load memberships");
     } finally {
       setLoading(false);
@@ -59,13 +58,13 @@ export default function MembershipsPage() {
         await deleteDashboardItem("membership_applications", id);
         setMemberships(memberships.filter(m => m.id !== id));
         toast.success("Submission deleted");
-      } catch (error) {
+      } catch {
         toast.error("Failed to delete submission");
       }
     }
   };
 
-  const formatDate = (timestamp: any) => {
+  const formatDate = (timestamp: { toDate: () => Date }) => {
     if (!timestamp) return "N/A";
     const date = timestamp.toDate();
     return date.toLocaleDateString("en-IN", {

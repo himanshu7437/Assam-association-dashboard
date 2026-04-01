@@ -65,7 +65,7 @@ interface Activity {
   type: 'booking' | 'notice' | 'document' | 'message' | 'system';
   user: string;
   action: string;
-  createdAt: any;
+  createdAt: { toDate: () => Date } | any;
   status?: 'success' | 'warning' | 'info' | 'error';
 }
 
@@ -135,15 +135,15 @@ export default function DashboardOverview() {
         members: committeeSnap.size
       });
       
-    } catch (error) {
-      console.error("Dashboard data error", error);
+    } catch {
+      // Data loading failed silently
     } finally {
       setLoading(false);
     }
   };
 
-  const getRelativeTime = (timestamp: any) => {
-    if (!timestamp) return "Just now";
+  const getRelativeTime = (timestamp: { toDate: () => Date } | null | undefined) => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') return "Just now";
     const now = new Date();
     const past = timestamp.toDate();
     const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);

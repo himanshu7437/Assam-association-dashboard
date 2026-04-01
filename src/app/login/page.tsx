@@ -18,6 +18,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Set a non-secure cookie to prevent layout flashes via Next.js middleware
+      document.cookie = "admin_auth=true; path=/; max-age=604800";
       toast.success("Login successful!");
       router.push("/dashboard");
     } catch (error: unknown) {

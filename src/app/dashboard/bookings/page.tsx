@@ -5,7 +5,6 @@ import {
   CheckCircle2, 
   XCircle, 
   Search, 
-  Filter, 
   Calendar,
   User,
   ChevronLeft,
@@ -36,7 +35,7 @@ interface Booking {
   date: string;
   status: 'approved' | 'pending' | 'rejected' | 'cancelled';
   amount: string;
-  createdAt?: any;
+  createdAt?: { toDate: () => Date } | null;
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -51,6 +50,7 @@ export default function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [facilityFilter, setFacilityFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
   // Derived unique facilities for the filter dropdown
   const facilities = Array.from(new Set(bookings.map(b => b.facility))).filter(Boolean);
@@ -94,8 +94,7 @@ export default function BookingsPage() {
         return timeB - timeA;
       });      
       setBookings(docsList);
-    } catch (error) {
-      console.error("Error fetching bookings:", error);
+    } catch {
       toast.error("Failed to load bookings");
     } finally {
       setLoading(false);
@@ -114,6 +113,7 @@ export default function BookingsPage() {
 
   const handleStatusChange = async (booking: Booking, newStatus: Booking['status']) => {
     try {
+      setIsUpdating(booking.id);
       const toastId = toast.loading(`Updating booking status...`);
       
       // 1. Update Firestore Document
@@ -144,13 +144,14 @@ export default function BookingsPage() {
             date: booking.date,
             status: newStatus
           })
-        }).catch(err => console.error("Email API failed:", err));
+        }).catch(() => {});
       }
 
       toast.success(`Booking ${newStatus} successfully`, { id: toastId });
-    } catch (error) {
-      console.error("Error updating booking:", error);
+    } catch {
       toast.error("Failed to update status");
+    } finally {
+      setIsUpdating(null);
     }
   };
 
@@ -160,6 +161,7 @@ export default function BookingsPage() {
     }
 
     try {
+      setIsUpdating(id);
       const toastId = toast.loading("Deleting booking...");
       await deleteDoc(doc(db, "bookings", id));
       
@@ -168,9 +170,10 @@ export default function BookingsPage() {
 
       setBookings(bookings.filter(b => b.id !== id));
       toast.success("Booking deleted successfully", { id: toastId });
-    } catch (error) {
-      console.error("Error deleting booking:", error);
+    } catch {
       toast.error("Failed to delete booking");
+    } finally {
+      setIsUpdating(null);
     }
   };
 
@@ -364,14 +367,16 @@ export default function BookingsPage() {
                           <>
                             <button 
                               onClick={() => handleStatusChange(booking, 'approved')}
-                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors border border-transparent hover:border-green-100"
+                              disabled={isUpdating === booking.id}
+                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors border border-transparent hover:border-green-100 disabled:opacity-50"
                               title="Approve"
                             >
-                              <CheckCircle2 size={18} />
+                              {isUpdating === booking.id ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                             </button>
                             <button 
                               onClick={() => handleStatusChange(booking, 'rejected')}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                              disabled={isUpdating === booking.id}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 disabled:opacity-50"
                               title="Reject"
                             >
                               <XCircle size={18} />
@@ -380,7 +385,8 @@ export default function BookingsPage() {
                         )}
                         <button 
                           onClick={() => handleDelete(booking.id, booking.facility, booking.user)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                          disabled={isUpdating === booking.id}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 disabled:opacity-50"
                           title="Delete"
                         >
                           <Trash2 size={18} />

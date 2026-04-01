@@ -62,7 +62,6 @@ export const getAlbums = async (): Promise<Album[]> => {
       ...doc.data()
     })) as Album[];
   } catch (error) {
-    console.error("Error fetching albums:", error);
     throw error;
   }
 };
@@ -74,7 +73,6 @@ export const getMemberships = async (): Promise<MembershipSubmission[]> => {
   try {
     const membershipsRef = collection(db, "membership_applications");
     const querySnapshot = await getDocs(membershipsRef);
-    console.log(`Fetched ${querySnapshot.size} membership applications from "membership_applications"`);
     
     const data = querySnapshot.docs.map(doc => ({
       id: doc.id,
@@ -88,7 +86,6 @@ export const getMemberships = async (): Promise<MembershipSubmission[]> => {
       return timeB - timeA;
     });
   } catch (error) {
-    console.error("Error fetching memberships:", error);
     throw error;
   }
 };
@@ -100,7 +97,6 @@ export const getContacts = async (): Promise<ContactSubmission[]> => {
   try {
     const contactsRef = collection(db, "contacts");
     const querySnapshot = await getDocs(contactsRef);
-    console.log(`Fetched ${querySnapshot.size} contact messages from "contacts"`);
     
     const data = querySnapshot.docs.map(doc => ({
       id: doc.id,
@@ -114,7 +110,6 @@ export const getContacts = async (): Promise<ContactSubmission[]> => {
       return timeB - timeA;
     });
   } catch (error) {
-    console.error("Error fetching contacts:", error);
     throw error;
   }
 };
@@ -126,7 +121,6 @@ export const deleteDashboardItem = async (collectionName: string, id: string): P
   try {
     await deleteDoc(doc(db, collectionName, id));
   } catch (error) {
-    console.error(`Error deleting item from ${collectionName}:`, error);
     throw error;
   }
 };

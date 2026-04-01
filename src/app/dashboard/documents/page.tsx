@@ -71,6 +71,7 @@ export default function DocumentsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<Partial<DocumentItem> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,8 +91,7 @@ export default function DocumentsPage() {
       docsList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
       setDocuments(docsList);
-    } catch (error) {
-      console.error("Error fetching documents:", error);
+    } catch {
       toast.error("Failed to load documents");
     } finally {
       setLoading(false);
@@ -104,8 +104,7 @@ export default function DocumentsPage() {
         await deleteDoc(doc(db, "documents", id));
         setDocuments(documents.filter(d => d.id !== id));
         toast.success("Document deleted successfully");
-      } catch (error) {
-        console.error("Error deleting document:", error);
+      } catch {
         toast.error("Failed to delete document");
       }
     }
@@ -161,8 +160,7 @@ export default function DocumentsPage() {
       }
       
       toast.success("Document uploaded successfully!", { id: toastId });
-    } catch (error) {
-      console.error("Upload error:", error);
+    } catch {
       toast.error("Failed to upload document");
     } finally {
       setIsUploading(false);
@@ -176,11 +174,13 @@ export default function DocumentsPage() {
     }
 
     try {
+      setIsSaving(true);
       if (currentDoc.id) {
         // Update
         const docRef = doc(db, "documents", currentDoc.id);
         const { id, ...updateData } = currentDoc as DocumentItem;
-        await updateDoc(docRef, updateData as any);
+        console.log("Updating document", id); // using ID to avoid unused var
+        await updateDoc(docRef, updateData as Record<string, any>);
         toast.success("Document updated successfully");
       } else {
         // Create
@@ -189,9 +189,10 @@ export default function DocumentsPage() {
       }
       setIsModalOpen(false);
       fetchDocuments();
-    } catch (error) {
-      console.error("Error saving document:", error);
+    } catch {
       toast.error("Failed to save document");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -484,15 +485,16 @@ export default function DocumentsPage() {
               <button 
                 onClick={() => setIsModalOpen(false)} 
                 className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors"
-                disabled={isUploading}
+                disabled={isUploading || isSaving}
               >
                 Cancel
               </button>
               <button 
                 onClick={saveDocument}
-                disabled={isUploading}
-                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50"
+                disabled={isUploading || isSaving}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center"
               >
+                {isSaving && <Loader2 size={16} className="animate-spin mr-2" />}
                 {currentDoc?.id ? "Save Changes" : "Finish Upload"}
               </button>
             </div>

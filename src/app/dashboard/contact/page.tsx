@@ -5,7 +5,6 @@ import {
   MessageSquare, 
   Search, 
   Trash2, 
-  User, 
   Clock, 
   Mail, 
   Phone,
@@ -39,7 +38,7 @@ export default function ContactMessagesPage() {
       setLoading(true);
       const data = await getContacts();
       setMessages(data);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load messages");
     } finally {
       setLoading(false);
@@ -53,13 +52,13 @@ export default function ContactMessagesPage() {
         setMessages(messages.filter(msg => msg.id !== id));
         if (selectedMessage?.id === id) setSelectedMessage(null);
         toast.success("Message deleted");
-      } catch (error) {
+      } catch {
         toast.error("Failed to delete message");
       }
     }
   };
 
-  const formatTime = (timestamp: any) => {
+  const formatTime = (timestamp: { toDate: () => Date }) => {
     if (!timestamp) return "Just now";
     const date = timestamp.toDate();
     return date.toLocaleDateString("en-IN", {

@@ -17,10 +17,11 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
+import Image from "next/image";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { toast } from "react-hot-toast";
 
@@ -51,6 +52,7 @@ export default function NoticesPage() {
   const [currentNotice, setCurrentNotice] = useState<Partial<Notice> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,8 +80,7 @@ export default function NoticesPage() {
       });
 
       setNotices(noticesList);
-    } catch (error) {
-      console.error("Error fetching notices:", error);
+    } catch {
       toast.error("Failed to load notices");
     } finally {
       setLoading(false);
@@ -92,8 +93,7 @@ export default function NoticesPage() {
         await deleteDoc(doc(db, "notices", id));
         setNotices(notices.filter(n => n.id !== id));
         toast.success("Notice deleted successfully");
-      } catch (error) {
-        console.error("Error deleting notice:", error);
+      } catch {
         toast.error("Failed to delete notice");
       }
     }
@@ -106,8 +106,7 @@ export default function NoticesPage() {
       await updateDoc(noticeRef, { pinned: !notice.pinned });
       setNotices(notices.map(n => n.id === notice.id ? { ...n, pinned: !n.pinned } : n));
       toast.success(notice.pinned ? "Notice unpinned" : "Notice pinned");
-    } catch (error) {
-      console.error("Error pinning notice:", error);
+    } catch {
       toast.error("Failed to pin notice");
     }
   };
@@ -126,7 +125,7 @@ export default function NoticesPage() {
     setIsModalOpen(true);
   };
 
-  const handleInputChange = (field: keyof Notice, value: any) => {
+  const handleInputChange = (field: keyof Notice, value: string | boolean | undefined) => {
     if (currentNotice) {
       setCurrentNotice({ ...currentNotice, [field]: value });
     }
@@ -152,8 +151,7 @@ export default function NoticesPage() {
       }
       
       toast.success("PDF uploaded successfully!", { id: toastId });
-    } catch (error) {
-      console.error("Upload error:", error);
+    } catch {
       toast.error("Failed to upload PDF");
     } finally {
       setIsUploading(false);
@@ -180,8 +178,7 @@ export default function NoticesPage() {
       }
       
       toast.success("Thumbnail uploaded successfully!", { id: toastId });
-    } catch (error) {
-      console.error("Upload error:", error);
+    } catch {
       toast.error("Failed to upload image");
     } finally {
       setIsImageUploading(false);
@@ -195,11 +192,12 @@ export default function NoticesPage() {
     }
 
     try {
+      setIsSaving(true);
       if (currentNotice.id) {
         // Update
         const noticeRef = doc(db, "notices", currentNotice.id);
-        const { id, ...updateData } = currentNotice as Notice;
-        await updateDoc(noticeRef, updateData as any);
+        const { id: _, ...updateData } = currentNotice as Notice;
+        await updateDoc(noticeRef, updateData as Record<string, any>);
         toast.success("Notice updated");
       } else {
         // Create
@@ -208,9 +206,10 @@ export default function NoticesPage() {
       }
       setIsModalOpen(false);
       fetchNotices();
-    } catch (error) {
-      console.error("Error saving notice:", error);
+    } catch {
       toast.error("Failed to save notice");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -351,8 +350,8 @@ export default function NoticesPage() {
                     </a>
                   )}
                   {notice.thumbnailUrl && (
-                    <div className="w-8 h-8 rounded-lg border border-indigo-100 overflow-hidden shadow-sm flex-shrink-0">
-                      <img src={notice.thumbnailUrl} alt="Thumb" className="w-full h-full object-cover" />
+                    <div className="w-8 h-8 rounded-lg border border-indigo-100 overflow-hidden shadow-sm flex-shrink-0 relative">
+                      <Image src={notice.thumbnailUrl} alt="Thumb" fill sizes="32px" className="object-cover" />
                     </div>
                   )}
                 </div>
@@ -497,9 +496,9 @@ export default function NoticesPage() {
                   <div className="flex space-x-2">
                     {currentNotice?.thumbnailUrl && (
                       <div className="relative group/thumb">
-                        <div className="w-10 h-10 rounded-lg border border-indigo-100 overflow-hidden shadow-sm">
-                          <img src={currentNotice.thumbnailUrl} alt="Preview" className="w-full h-full object-cover" />
-                        </div>
+                      <div className="w-10 h-10 rounded-lg border border-indigo-100 overflow-hidden shadow-sm relative">
+                        <Image src={currentNotice.thumbnailUrl} alt="Preview" fill sizes="40px" className="object-cover" />
+                      </div>
                         <button 
                           onClick={() => handleInputChange("thumbnailUrl", "")}
                           className="absolute -top-1.5 -right-1.5 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-sm transition-all"
@@ -562,9 +561,10 @@ export default function NoticesPage() {
               </button>
               <button 
                 onClick={saveNotice}
-                disabled={isUploading}
-                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50"
+                disabled={isUploading || isImageUploading || isSaving}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center"
               >
+                {isSaving && <Loader2 size={16} className="animate-spin mr-2" />}
                 {currentNotice?.id ? "Save Changes" : "Post Notice"}
               </button>
             </div>

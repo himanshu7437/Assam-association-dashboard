@@ -63,7 +63,7 @@ export interface Facility {
   bookingPolicy?: string;
   remarks?: string;
 
-  createdAt?: any;
+  createdAt?: { toMillis: () => number } | any;
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -79,6 +79,7 @@ export default function ServicesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentFacility, setCurrentFacility] = useState<Partial<Facility> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
@@ -109,8 +110,7 @@ export default function ServicesPage() {
       });
       
       setFacilities(docsList);
-    } catch (error) {
-      console.error("Error fetching facilities:", error);
+    } catch {
       toast.error("Failed to load facilities");
     } finally {
       setLoading(false);
@@ -125,8 +125,7 @@ export default function ServicesPage() {
         
         await logActivity("system", user?.email?.split('@')[0] || "Admin", `deleted facility: ${name}`, "warning");
         toast.success("Entry removed");
-      } catch (error) {
-        console.error("Error deleting facility:", error);
+      } catch {
         toast.error("Failed to delete entry");
       }
     }
@@ -163,7 +162,6 @@ export default function ServicesPage() {
       
       toast.success("Image uploaded successfully!", { id: toastId });
     } catch (error) {
-      console.error(error);
       toast.error(error instanceof Error ? error.message : "Upload failed");
     } finally {
       setIsUploading(false);
@@ -188,7 +186,6 @@ export default function ServicesPage() {
       
       toast.success("Gallery images uploaded successfully!", { id: toastId });
     } catch (error) {
-      console.error("Gallery upload error:", error);
       toast.error(error instanceof Error ? error.message : "Upload failed");
     } finally {
       setIsUploadingGallery(false);
@@ -221,7 +218,6 @@ export default function ServicesPage() {
       
       toast.success("Room images uploaded successfully!", { id: toastId });
     } catch (error) {
-      console.error("Room image upload error:", error);
       toast.error(error instanceof Error ? error.message : "Upload failed");
     } finally {
       setUploadingRoomId(null);
@@ -248,6 +244,7 @@ export default function ServicesPage() {
     }
 
     try {
+      setIsSaving(true);
       const adminName = user?.email?.split('@')[0] || "Admin";
       
       // Clean up irrelevant fields based on type
@@ -270,7 +267,7 @@ export default function ServicesPage() {
       if (currentFacility.id) {
         const docRef = doc(db, "facilities", currentFacility.id);
         const { id, ...updateData } = dataToSave;
-        await updateDoc(docRef, updateData as any);
+        await updateDoc(docRef, updateData as unknown as Record<string, any>);
         
         await logActivity("system", adminName, `updated facility: ${currentFacility.name}`, "info");
         toast.success("Facility updated");
@@ -286,9 +283,10 @@ export default function ServicesPage() {
       }
       setIsModalOpen(false);
       fetchFacilities();
-    } catch (error) {
-      console.error("Error saving facility:", error);
+    } catch {
       toast.error("Failed to save facility");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -317,7 +315,7 @@ export default function ServicesPage() {
     }));
   };
 
-  const updateRoom = (id: string, field: keyof Room, value: any) => {
+  const updateRoom = (id: string, field: keyof Room, value: string | number | string[]) => {
     setCurrentFacility(prev => ({
       ...prev,
       rooms: (prev?.rooms || []).map(r => r.id === id ? { ...r, [field]: value } : r)
@@ -342,7 +340,7 @@ export default function ServicesPage() {
     }));
   };
 
-  const updatePricingSlot = (id: string, field: keyof PricingSlot, value: any) => {
+  const updatePricingSlot = (id: string, field: keyof PricingSlot, value: string | number) => {
     setCurrentFacility(prev => ({
       ...prev,
       pricing: (prev?.pricing || []).map(p => p.id === id ? { ...p, [field]: value } : p)
@@ -878,16 +876,17 @@ export default function ServicesPage() {
             <div className="sticky bottom-0 z-10 px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end space-x-3">
               <button 
                 onClick={() => setIsModalOpen(false)}
-                disabled={isUploading}
+                disabled={isUploading || isSaving}
                 className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition-colors shrink-0"
               >
                 Cancel
               </button>
               <button 
                 onClick={saveFacility}
-                disabled={isUploading}
-                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50"
+                disabled={isUploading || isSaving || isUploadingGallery || uploadingRoomId !== null}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center"
               >
+                {isSaving && <Loader2 size={16} className="animate-spin mr-2" />}
                 {currentFacility?.id ? "Update Facility" : "Save Facility"}
               </button>
             </div>

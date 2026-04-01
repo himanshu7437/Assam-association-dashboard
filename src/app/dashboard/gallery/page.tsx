@@ -40,7 +40,7 @@ interface Album {
   itemCount: number;
   date: string;
   media: MediaItem[];
-  createdAt?: any;
+  createdAt?: { toMillis: () => number } | any;
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -57,6 +57,7 @@ export default function GalleryPage() {
   const [currentAlbum, setCurrentAlbum] = useState<Partial<Album> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isMediaUploading, setIsMediaUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,8 +83,7 @@ export default function GalleryPage() {
       });
       
       setAlbums(docsList);
-    } catch (error) {
-      console.error("Error fetching albums:", error);
+    } catch {
       toast.error("Failed to load albums");
     } finally {
       setLoading(false);
@@ -98,8 +98,7 @@ export default function GalleryPage() {
         
         await logActivity("system", user?.email?.split('@')[0] || "Admin", `deleted gallery album: ${title}`, "warning");
         toast.success("Album deleted successfully");
-      } catch (error) {
-        console.error("Error deleting album:", error);
+      } catch {
         toast.error("Failed to delete album");
       }
     }
@@ -124,7 +123,6 @@ export default function GalleryPage() {
       }
       toast.success("Cover image uploaded!", { id: toastId });
     } catch (error) {
-      console.error(error);
       toast.error(error instanceof Error ? error.message : "Upload failed");
     } finally {
       setIsUploading(false);
@@ -163,8 +161,7 @@ export default function GalleryPage() {
       }
       
       toast.success(`${uploadedMedia.length} items uploaded!`, { id: toastId });
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast.error("Some uploads failed. Please try again.");
     } finally {
       setIsMediaUploading(false);
@@ -190,16 +187,17 @@ export default function GalleryPage() {
     }
 
     try {
+      setIsSaving(true);
       const adminName = user?.email?.split('@')[0] || "Admin";
 
       if (currentAlbum.id) {
         const docRef = doc(db, "albums", currentAlbum.id);
-        const { id, ...updateData } = currentAlbum;
+        const { id: _, ...updateData } = currentAlbum as Album;
         await updateDoc(docRef, {
           ...updateData,
           media: currentAlbum.media || [],
           itemCount: currentAlbum.media?.length || 0
-        });
+        } as Record<string, any>);
         
         await logActivity("system", adminName, `updated gallery album: ${currentAlbum.title}`, "info");
         toast.success("Album updated");
@@ -217,9 +215,10 @@ export default function GalleryPage() {
       }
       setIsModalOpen(false);
       fetchAlbums();
-    } catch (error) {
-      console.error("Error saving album:", error);
+    } catch {
       toast.error("Failed to save album");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -472,9 +471,10 @@ export default function GalleryPage() {
               </button>
               <button 
                 onClick={saveAlbum}
-                disabled={isUploading}
-                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50"
+                disabled={isUploading || isSaving || isMediaUploading}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center"
               >
+                {(isSaving) && <Loader2 size={16} className="animate-spin mr-2" />}
                 {currentAlbum?.id ? "Update Album" : "Create Album"}
               </button>
             </div>

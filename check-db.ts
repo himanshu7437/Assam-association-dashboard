@@ -8,8 +8,10 @@ async function checkData() {
     try {
       const snap = await getDocs(collection(db, colName));
       console.log(`Collection "${colName}": ${snap.size} documents found.`);
-    } catch (e: any) {
-      console.error(`Error checking "${colName}": ${e.message}`);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        console.error(`Error checking "${colName}": ${e.message}`);
+      }
     }
   }
 }

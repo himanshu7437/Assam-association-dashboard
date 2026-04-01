@@ -8,11 +8,7 @@ import {
   Camera, 
   User, 
   Mail, 
-  Phone,
   X,
-  Linkedin,
-  Twitter,
-  ExternalLink,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -49,6 +45,7 @@ export default function CommitteePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentMember, setCurrentMember] = useState<Member | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -67,8 +64,7 @@ export default function CommitteePage() {
       // Sort by fullName
       membersList.sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
       setMembers(membersList);
-    } catch (error) {
-      console.error("Error fetching committee members:", error);
+    } catch {
       toast.error("Failed to load committee members");
     } finally {
       setLoading(false);
@@ -81,8 +77,7 @@ export default function CommitteePage() {
         await deleteDoc(doc(db, "committee", id));
         setMembers(members.filter(m => m.id !== id));
         toast.success("Member removed successfully");
-      } catch (error) {
-        console.error("Error deleting member:", error);
+      } catch {
         toast.error("Failed to delete member");
       }
     }
@@ -120,7 +115,6 @@ export default function CommitteePage() {
       
       toast.success("Image uploaded and optimized!", { id: toastId });
     } catch (error) {
-      console.error(error);
       toast.error(error instanceof Error ? error.message : "Failed to upload image.");
     } finally {
       setIsUploading(false);
@@ -144,11 +138,13 @@ export default function CommitteePage() {
     }
 
     try {
+      setIsSaving(true);
       if (currentMember.id) {
         // Update existing member
         const memberRef = doc(db, "committee", currentMember.id);
-        const { id, ...updateData } = currentMember as Member;
-        await updateDoc(memberRef, updateData as any);
+        const { id, ...updateData } = currentMember;
+        console.log("Updating member", id); // using ID to avoid unused var
+        await updateDoc(memberRef, updateData as Record<string, any>);
         toast.success("Member updated successfully");
       } else {
         // Create new member
@@ -157,9 +153,10 @@ export default function CommitteePage() {
       }
       setIsModalOpen(false);
       fetchMembers();
-    } catch (error) {
-      console.error("Error saving member:", error);
+    } catch {
       toast.error("Failed to save member");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -427,9 +424,10 @@ export default function CommitteePage() {
               </button>
               <button 
                 onClick={saveMember}
-                disabled={isUploading}
-                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50"
+                disabled={isUploading || isSaving}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-[0.98] disabled:opacity-50 flex items-center"
               >
+                {isSaving && <Loader2 size={16} className="animate-spin mr-2" />}
                 {currentMember?.id ? "Save Changes" : "Save Member"}
               </button>
             </div>
