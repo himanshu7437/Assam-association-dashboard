@@ -34,7 +34,6 @@ interface Booking {
   facility: string;
   date: string;
   status: 'approved' | 'pending' | 'rejected' | 'cancelled';
-  amount: string;
   createdAt?: { toDate: () => Date } | null;
 }
 
@@ -82,7 +81,6 @@ export default function BookingsPage() {
           facility: data.facility || "Unknown",
           date: dateStr,
           status: data.status || "pending",
-          amount: data.amount || "N/A",
           createdAt: data.createdAt
         };
       }) as Booking[];
@@ -184,7 +182,7 @@ export default function BookingsPage() {
     }
 
     // Define CSV headers
-    const headers = ["S.No", "Requestor", "Email", "Phone", "Facility", "Date", "Status", "Amount", "Message"];
+    const headers = ["S.No", "Requestor", "Email", "Phone", "Facility", "Date", "Status", "Message"];
     
     // Convert data to CSV rows
     const rows = filteredBookings.map((b, index) => [
@@ -195,7 +193,6 @@ export default function BookingsPage() {
       `"${(b.facility || "").toString().replace(/"/g, '""')}"`,
       `"${(b.date || "").toString().replace(/"/g, '""')}"`,
       `"${(b.status || "").toString().replace(/"/g, '""')}"`,
-      `"${(b.amount || "").toString().replace(/"/g, '""')}"`,
       `"${(b.message || "").toString().replace(/"/g, '""').replace(/\r?\n|\r/g, " ")}"`
     ]);
 
@@ -312,7 +309,6 @@ export default function BookingsPage() {
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest min-w-[150px]">Requester / Contact</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest min-w-[150px]">Facility / Message</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Amount</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Status</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
@@ -349,9 +345,6 @@ export default function BookingsPage() {
                         <Calendar size={14} className="mr-2 text-gray-400" />
                         {booking.date}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-bold text-gray-900">{booking.amount}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <span className={cn(
@@ -398,7 +391,7 @@ export default function BookingsPage() {
 
                 {!loading && paginatedBookings.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
                       <p className="font-bold">No bookings found</p>
                       <p className="text-sm">Wait for public users to submit booking requests.</p>
                     </td>
