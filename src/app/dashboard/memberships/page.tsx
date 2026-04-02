@@ -12,7 +12,10 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  FileText,
+  Download,
+  ExternalLink
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -21,11 +24,20 @@ import {
   deleteDashboardItem, 
   MembershipSubmission 
 } from "@/lib/api/dashboard";
+import { optimizeCloudinaryUrl, getDownloadUrl } from "@/lib/cloudinary";
 import { toast } from "react-hot-toast";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+const ensureAbsoluteUrl = (url?: string) => {
+  if (!url) return "#";
+  const trimmedUrl = url.trim();
+  if (trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")) return trimmedUrl;
+  if (trimmedUrl.startsWith("//")) return `https:${trimmedUrl}`;
+  return `https://${trimmedUrl}`;
+};
 
 const ITEMS_PER_PAGE = 8;
 
@@ -33,7 +45,6 @@ export default function MembershipsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [memberships, setMemberships] = useState<MembershipSubmission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -81,9 +92,7 @@ export default function MembershipsPage() {
                        (m.phone?.toLowerCase() || "").includes(searchTermLower) ||
                        (m.occupation?.toLowerCase() || "").includes(searchTermLower);
     
-    const statusMatch = statusFilter === "all" || m.status === statusFilter;
-
-    return searchMatch && statusMatch;
+    return searchMatch;
   });
 
   const totalPages = Math.ceil(filteredMemberships.length / ITEMS_PER_PAGE);
@@ -118,18 +127,6 @@ export default function MembershipsPage() {
           />
         </div>
         <div className="flex items-center space-x-3">
-          <select 
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="text-sm font-bold text-gray-600 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-          </select>
         </div>
       </div>
 
@@ -159,15 +156,6 @@ export default function MembershipsPage() {
                           <User size={16} />
                         </div>
                         <span className="text-sm font-bold text-gray-900">{member.fullName || "Unnamed"}</span>
-                        {member.status && (
-                          <span className={cn(
-                            "ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tighter shadow-sm",
-                            member.status === 'pending' ? "bg-amber-100 text-amber-600 border border-amber-200" : 
-                            member.status === 'approved' ? "bg-green-100 text-green-600 border border-green-200" : "bg-gray-100 text-gray-600 border border-gray-200"
-                          )}>
-                            {member.status}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -178,7 +166,7 @@ export default function MembershipsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">{member.membershipType || "General"} • {member.occupation || "Member"}</span>
+                        <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">{member.occupation || "Member"}</span>
                         <span className="text-[10px] text-gray-400 line-clamp-1 flex items-center"><MapPin size={10} className="mr-1" /> {member.address || "N/A"}</span>
                       </div>
                     </td>
@@ -189,13 +177,48 @@ export default function MembershipsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button 
-                        onClick={() => handleDelete(member.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center justify-end space-x-2">
+                        {member.membershipFormUrl ? (
+                          <>
+                            <a
+                              href={optimizeCloudinaryUrl(ensureAbsoluteUrl(member.membershipFormUrl))}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 flex items-center gap-1 group/btn"
+                              title="View Membership Form"
+                            >
+                              <FileText size={18} />
+                              <span className="text-[10px] font-bold uppercase hidden group-hover/btn:block">View Form</span>
+                            </a>
+                            <a
+                              href={getDownloadUrl(ensureAbsoluteUrl(member.membershipFormUrl))}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100 flex items-center gap-1 group/btn"
+                              title="Download Membership Form"
+                            >
+                              <Download size={18} />
+                              <span className="text-[10px] font-bold uppercase hidden group-hover/btn:block">Download</span>
+                            </a>
+                          </>
+                        ) : (
+                          <button
+                            disabled
+                            className="p-1.5 text-gray-300 cursor-not-allowed flex items-center gap-1"
+                            title="No Form Uploaded"
+                          >
+                            <FileText size={18} />
+                            <span className="text-[10px] font-bold uppercase">No Form</span>
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => handleDelete(member.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

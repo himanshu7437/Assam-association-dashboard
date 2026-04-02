@@ -64,3 +64,17 @@ export const optimizeCloudinaryUrl = (url: string): string => {
   if (!url.includes("cloudinary.com")) return url;
   return url.replace("/upload/", "/upload/f_auto,q_auto/");
 };
+
+/**
+ * Generates a Cloudinary URL that forced file downloading
+ * @param url The original Cloudinary secure_url
+ * @returns URL with fl_attachment flag
+ */
+export const getDownloadUrl = (url: string): string => {
+  if (!url.includes("cloudinary.com")) return url;
+  
+  // Normalize by removing optimization flags if they already exist, 
+  // then inject the direct download flags in the requested order.
+  const normalizedUrl = url.replace("/f_auto,q_auto/", "/");
+  return normalizedUrl.replace("/upload/", "/upload/fl_attachment/f_auto,q_auto/");
+};

@@ -88,6 +88,7 @@ export default function DashboardOverview() {
   // Calendar Navigation State
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -204,6 +205,7 @@ export default function DashboardOverview() {
     } else {
       setCurrentMonth(prev => prev - 1);
     }
+    setSelectedDate(null);
   };
 
   const handleNextMonth = () => {
@@ -213,6 +215,7 @@ export default function DashboardOverview() {
     } else {
       setCurrentMonth(prev => prev + 1);
     }
+    setSelectedDate(null);
   };
 
   return (
@@ -334,8 +337,8 @@ export default function DashboardOverview() {
 
       {/* Calendar Modal */}
       {isCalendarOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 my-8">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
               <div className="flex items-center space-x-4">
                 <button 
@@ -370,42 +373,103 @@ export default function DashboardOverview() {
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-2">
-                {calendarData.days.map((item, i) => (
-                  <div 
-                    key={i} 
-                    className={cn(
-                      "aspect-square rounded-xl flex flex-col items-start justify-start text-sm border transition-all p-1.5 overflow-hidden",
-                      !item.day ? "border-transparent bg-transparent" :
-                      item.booked.length > 0 
-                        ? "bg-indigo-50 border-indigo-200 font-bold text-indigo-900 shadow-sm" 
-                        : "bg-white border-gray-100 text-gray-600 hover:border-indigo-200"
-                    )}
-                  >
-                    {item.day && (
-                      <span className="mb-1 text-xs">{item.day}</span>
-                    )}
-                    {item.booked.length > 0 && (
-                      <div className="flex flex-col gap-0.5 w-full overflow-y-auto no-scrollbar">
-                        {item.booked.slice(0, 2).map((booking, idx) => (
-                          <div 
-                            key={idx} 
-                            title={booking.facility}
-                            className="text-[8px] leading-tight px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 truncate w-full border border-indigo-200"
-                          >
-                            {booking.facility}
-                          </div>
-                        ))}
-                        {item.booked.length > 2 && (
-                          <div className="text-[7px] text-indigo-500 font-bold pl-1">
-                            +{item.booked.length - 2} more
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                {calendarData.days.map((item, i) => {
+                  const dateStr = item.day ? `${calendarData.year}-${String(calendarData.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}` : null;
+                  const isSelected = selectedDate === dateStr;
+                  
+                  return (
+                    <div 
+                      key={i} 
+                      onClick={() => item.day && setSelectedDate(dateStr)}
+                      className={cn(
+                        "aspect-square rounded-xl flex flex-col items-center sm:items-start justify-center sm:justify-start text-sm border transition-all p-1 sm:p-1.5 overflow-hidden cursor-pointer",
+                        !item.day ? "border-transparent bg-transparent cursor-default" :
+                        item.booked.length > 0 
+                          ? cn(
+                              "bg-indigo-50 border-indigo-200 font-bold text-indigo-900 shadow-sm hover:scale-[1.02]",
+                              isSelected && "ring-2 ring-indigo-500 border-transparent shadow-md bg-indigo-100"
+                            )
+                          : cn(
+                              "bg-white border-gray-100 text-gray-600 hover:border-indigo-200 hover:bg-gray-50",
+                              isSelected && "ring-2 ring-indigo-500 border-transparent shadow-md"
+                            )
+                      )}
+                    >
+                      {item.day && (
+                        <>
+                          <span className={cn(
+                            "text-[10px] sm:text-xs mb-0.5",
+                            isSelected && "text-indigo-600"
+                          )}>{item.day}</span>
+                          
+                          {/* Indicator for Mobile */}
+                          {item.booked.length > 0 && (
+                            <div className="sm:hidden flex space-x-0.5 mt-auto">
+                              {item.booked.slice(0, 3).map((_, idx) => (
+                                <div key={idx} className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              ))}
+                              {item.booked.length > 3 && <div className="text-[6px] text-indigo-500">+</div>}
+                            </div>
+                          )}
+
+                          {/* Detail View for Desktop */}
+                          {item.booked.length > 0 && (
+                            <div className="hidden sm:flex flex-col gap-0.5 w-full overflow-y-auto no-scrollbar">
+                              {item.booked.slice(0, 2).map((booking, idx) => (
+                                <div 
+                                  key={idx} 
+                                  title={booking.facility}
+                                  className="text-[8px] leading-tight px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 truncate w-full border border-indigo-200"
+                                >
+                                  {booking.facility}
+                                </div>
+                              ))}
+                              {item.booked.length > 2 && (
+                                <div className="text-[7px] text-indigo-500 font-bold pl-1">
+                                  +{item.booked.length - 2} more
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* Selected Day Details (Visible when something is selected) */}
+              {selectedDate && (
+                <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-bold text-gray-900 border-l-4 border-indigo-600 pl-3">
+                      Bookings on {new Date(selectedDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h4>
+                    <button 
+                      onClick={() => setSelectedDate(null)}
+                      className="text-xs text-gray-400 hover:text-gray-600 font-bold"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  
+                  {calendarData.days.find(d => d.day && `${calendarData.year}-${String(calendarData.month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` === selectedDate)?.booked.length! > 0 ? (
+                    <div className="space-y-2">
+                      {calendarData.days.find(d => d.day && `${calendarData.year}-${String(calendarData.month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` === selectedDate)?.booked.map((bk, i) => (
+                        <div key={i} className="flex items-center p-3 bg-white rounded-xl shadow-sm border border-indigo-100 text-sm">
+                          <div className="w-2 h-2 rounded-full bg-indigo-600 mr-3 animate-pulse" />
+                          <span className="font-bold text-gray-800">{bk.facility}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-gray-400 italic text-xs">
+                      No bookings for this day.
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="mt-6 flex items-center justify-center space-x-4 text-xs font-bold text-gray-500">
                 <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-indigo-500 mr-2"></div> Booked Facility</div>
                 <div className="flex items-center"><div className="w-3 h-3 rounded-full border border-gray-200 mr-2"></div> Available</div>

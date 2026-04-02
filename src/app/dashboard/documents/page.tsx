@@ -19,7 +19,7 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
-import { uploadToCloudinary } from "@/lib/cloudinary";
+import { uploadToCloudinary, getDownloadUrl } from "@/lib/cloudinary";
 import { toast } from "react-hot-toast";
 
 function cn(...inputs: ClassValue[]) {
@@ -279,7 +279,7 @@ export default function DocumentsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden min-h-[400px]">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto min-h-[400px]">
             {loading ? (
               <div className="flex justify-center items-center h-64">
                 <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
@@ -288,46 +288,46 @@ export default function DocumentsPage() {
               <table className="min-w-full divide-y divide-gray-100">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Document Name</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Category</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Year</th>
-                    <th className="px-6 py-4 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
+                    <th className="px-4 sm:px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Document Name</th>
+                    <th className="px-4 sm:px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Category</th>
+                    <th className="px-4 sm:px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Year</th>
+                    <th className="px-4 sm:px-6 py-4 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {paginatedDocuments.map((docItem) => (
                     <tr key={docItem.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="h-10 w-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center mr-3 group-hover:scale-110 transition-transform shadow-sm">
                             <FileText size={20} />
                           </div>
                           <div>
-                            <div className="text-sm font-bold text-gray-900 truncate max-w-xs" title={docItem.name}>{docItem.name}</div>
+                            <div className="text-sm font-bold text-gray-900 truncate max-w-[150px] sm:max-w-xs" title={docItem.name}>{docItem.name}</div>
                             <div className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{docItem.size} • {docItem.date}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap hidden lg:table-cell">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 uppercase tracking-wider">
                           {docItem.category}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap hidden sm:table-cell">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-bold text-gray-600">{docItem.year}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end space-x-2">
                           {docItem.url && (
-                            <a 
-                              href={docItem.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-gray-100"
-                              title="Download/View"
-                            >
-                              <Download size={18} />
-                            </a>
+                             <a 
+                               href={getDownloadUrl(docItem.url)} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-indigo-100"
+                               title="Download Document"
+                             >
+                               <Download size={18} />
+                             </a>
                           )}
                           <button 
                             onClick={() => openModal(docItem)}

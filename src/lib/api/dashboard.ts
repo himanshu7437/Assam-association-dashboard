@@ -31,10 +31,9 @@ export interface MembershipSubmission {
   email: string;
   phone: string;
   address?: string;
-  membershipType?: string;
   occupation?: string;
-  status?: string;
   createdAt: Timestamp;
+  membershipFormUrl?: string;
 }
 
 export interface ContactSubmission {
