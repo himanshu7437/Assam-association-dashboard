@@ -32,7 +32,9 @@ interface Booking {
   phone?: string;
   message?: string;
   facility: string;
-  date: string;
+  date?: string; // Legacy fallback
+  checkIn: string;
+  checkOut: string;
   status: 'approved' | 'pending' | 'rejected' | 'cancelled';
   createdAt?: { toDate: () => Date } | null;
 }
@@ -64,14 +66,20 @@ export default function BookingsPage() {
       const querySnapshot = await getDocs(collection(db, "bookings"));
       const docsList = querySnapshot.docs.map(doc => {
         const data = doc.data();
-        let dateStr = "N/A";
-        if (data.date) {
-          if (typeof data.date.toDate === 'function') {
-            dateStr = data.date.toDate().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-          } else {
-            dateStr = String(data.date);
+        
+        // Helper to format date strings consistently
+        const formatDate = (dateVal: any) => {
+          if (!dateVal) return "";
+          if (typeof dateVal.toDate === 'function') {
+            return dateVal.toDate().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
           }
-        }
+          return String(dateVal);
+        };
+
+        // Handle Legacy fallback
+        let checkIn = data.checkIn ? formatDate(data.checkIn) : formatDate(data.date);
+        let checkOut = data.checkOut ? formatDate(data.checkOut) : formatDate(data.date);
+
         return {
           id: doc.id,
           user: data.name || data.user || "Unknown Requestor",
@@ -79,16 +87,18 @@ export default function BookingsPage() {
           phone: data.phone || "",
           message: data.message || "",
           facility: data.facility || "Unknown",
-          date: dateStr,
+          date: formatDate(data.date), // Keep for legacy
+          checkIn,
+          checkOut,
           status: data.status || "pending",
           createdAt: data.createdAt
         };
       }) as Booking[];
       
-      // Sort by latest created or date
+      // Sort by latest created or check-in date
       docsList.sort((a, b) => {
-        const timeA = a.createdAt && typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate().getTime() : (a.date ? new Date(a.date).getTime() : 0);
-        const timeB = b.createdAt && typeof b.createdAt.toDate === 'function' ? b.createdAt.toDate().getTime() : (b.date ? new Date(b.date).getTime() : 0);
+        const timeA = a.createdAt && typeof a.createdAt.toDate === 'function' ? a.createdAt.toDate().getTime() : (a.checkIn ? new Date(a.checkIn).getTime() : 0);
+        const timeB = b.createdAt && typeof b.createdAt.toDate === 'function' ? b.createdAt.toDate().getTime() : (b.checkIn ? new Date(b.checkIn).getTime() : 0);
         return timeB - timeA;
       });      
       setBookings(docsList);
@@ -139,7 +149,7 @@ export default function BookingsPage() {
             userEmail: booking.userEmail || "test@example.com",
             userName: booking.user,
             facility: booking.facility,
-            date: booking.date,
+            date: booking.checkIn === booking.checkOut ? booking.checkIn : `${booking.checkIn} - ${booking.checkOut}`,
             status: newStatus
           })
         }).catch(() => {});
@@ -182,7 +192,7 @@ export default function BookingsPage() {
     }
 
     // Define CSV headers
-    const headers = ["S.No", "Requestor", "Email", "Phone", "Facility", "Date", "Status", "Message"];
+    const headers = ["S.No", "Requestor", "Email", "Phone", "Facility", "Check-in", "Check-out", "Status", "Message"];
     
     // Convert data to CSV rows
     const rows = filteredBookings.map((b, index) => [
@@ -191,7 +201,8 @@ export default function BookingsPage() {
       `"${(b.userEmail || "").toString().replace(/"/g, '""')}"`,
       `"${(b.phone || "").toString().replace(/"/g, '""')}"`,
       `"${(b.facility || "").toString().replace(/"/g, '""')}"`,
-      `"${(b.date || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.checkIn || "").toString().replace(/"/g, '""')}"`,
+      `"${(b.checkOut || "").toString().replace(/"/g, '""')}"`,
       `"${(b.status || "").toString().replace(/"/g, '""')}"`,
       `"${(b.message || "").toString().replace(/"/g, '""').replace(/\r?\n|\r/g, " ")}"`
     ]);
@@ -308,7 +319,8 @@ export default function BookingsPage() {
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest min-w-[150px]">Requester / Contact</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest min-w-[150px]">Facility / Message</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Check-in</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Check-out</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Status</th>
                   <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
                 </tr>
@@ -343,7 +355,13 @@ export default function BookingsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-600 font-medium">
                         <Calendar size={14} className="mr-2 text-gray-400" />
-                        {booking.date}
+                        {booking.checkIn}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center text-sm text-gray-600 font-medium">
+                        <Calendar size={14} className="mr-2 text-gray-400" />
+                        {booking.checkOut}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
