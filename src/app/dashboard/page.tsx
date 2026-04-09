@@ -1,11 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { 
   Users, 
   Calendar, 
-  FileText, 
-  MessageSquare, 
   TrendingUp, 
   Clock, 
   ChevronRight,
@@ -13,14 +12,13 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Bell,
-  X,
   Loader2
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -60,14 +58,11 @@ function StatCard({ title, value, change, trend, icon, color }: StatCardProps) {
   );
 }
 
-interface Activity {
-  id: string;
-  type: 'booking' | 'notice' | 'document' | 'message' | 'system';
-  user: string;
-  action: string;
-  createdAt: { toDate: () => Date } | any;
-  status?: 'success' | 'warning' | 'info' | 'error';
-}
+// Lazy load the heavy calendar modal
+const CalendarModal = dynamic(() => import("@/components/dashboard/CalendarModal"), { 
+  ssr: false,
+  loading: () => <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10"><Loader2 className="animate-spin text-indigo-600" /></div>
+});
 
 interface Booking {
   id: string;
@@ -81,16 +76,10 @@ interface Booking {
 export default function DashboardOverview() {
   const { user } = useAuth();
   
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState({ bookings: 0, notices: 0, members: 0 });
   const [loading, setLoading] = useState(true);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  
-  // Calendar Navigation State
-  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -99,11 +88,6 @@ export default function DashboardOverview() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch Recent Activities
-      const activitiesSnap = await getDocs(query(collection(db, "activities"), orderBy("createdAt", "desc"), limit(6)));
-      const acts = activitiesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Activity[];
-      setActivities(acts);
 
       // Fetch Bookings for Calendar & Stats
       const bookingsSnap = await getDocs(collection(db, "bookings"));
@@ -154,82 +138,19 @@ export default function DashboardOverview() {
     }
   };
 
-  const getRelativeTime = (timestamp: { toDate: () => Date } | null | undefined) => {
-    if (!timestamp || typeof timestamp.toDate !== 'function') return "Just now";
-    const now = new Date();
-    const past = timestamp.toDate();
-    const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  };
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  const [facilityFilter, setFacilityFilter] = useState<string>("all");
-  const facilities = Array.from(new Set(bookings.map(b => b.facility))).filter(Boolean);
+  const pendingBookings = bookings
+    .filter(b => b.status === "pending")
+    .slice(0, 5);
 
-  const getCalendarDays = (month: number, year: number) => {
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startPadding = firstDay.getDay(); // 0 is Sunday
-    const daysInMonth = lastDay.getDate();
+  const upcomingBookings = bookings
+    .filter(b => b.checkIn >= todayStr)
+    .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+    .slice(0, 5);
 
-    // Filter bookings by facility if applicable
-    const relevantBookings = bookings.filter(b => 
-      (facilityFilter === "all" || b.facility === facilityFilter) &&
-      (b.status === "approved" || b.status === "pending")
-    );
-    
-    const days = [];
-    // Padding from previous month
-    for (let i = 0; i < startPadding; i++) {
-      days.push({ day: null, booked: [] });
-    }
-    // Days of the current month
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      
-      const dayBookings = relevantBookings
-        .filter(b => {
-          if (!b.checkIn || !b.checkOut) return false;
-          return dateStr >= b.checkIn && dateStr <= b.checkOut;
-        })
-        .map(b => ({
-          id: b.id,
-          facility: b.facility,
-          status: b.status,
-          checkIn: b.checkIn,
-          checkOut: b.checkOut
-        }));
-      days.push({ day: d, booked: dayBookings });
-    }
-    
-    return { year, month, days };
-  };
 
-  const calendarData = getCalendarDays(currentMonth, currentYear);
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-
-  const handlePrevMonth = () => {
-    if (currentMonth === 0) {
-      setCurrentMonth(11);
-      setCurrentYear(prev => prev - 1);
-    } else {
-      setCurrentMonth(prev => prev - 1);
-    }
-    setSelectedDate(null);
-  };
-
-  const handleNextMonth = () => {
-    if (currentMonth === 11) {
-      setCurrentMonth(0);
-      setCurrentYear(prev => prev + 1);
-    } else {
-      setCurrentMonth(prev => prev + 1);
-    }
-    setSelectedDate(null);
-  };
 
   return (
     <div className="space-y-8">
@@ -282,51 +203,89 @@ export default function DashboardOverview() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[400px]">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-bold text-gray-900 flex items-center">
-              <TrendingUp className="mr-2 text-indigo-600 h-5 w-5" />
-              Recent System Activity
-            </h3>
-          </div>
+        {/* Dashboard Panels */}
+        <div className="lg:col-span-2 space-y-8">
           
-          {loading ? (
-             <div className="flex items-center justify-center p-12">
-               <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-             </div>
-          ) : activities.length === 0 ? (
-            <div className="p-12 text-center text-gray-400">
-              <p className="font-bold">No recent activities</p>
-              <p className="text-sm">System actions will appear here automatically.</p>
+          {/* Pending Approvals Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 flex items-center">
+                <Clock className="mr-2 text-amber-500 h-5 w-5" />
+                Pending Approvals
+              </h3>
             </div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {activities.map((activity) => (
-                <div key={activity.id} className="px-6 py-4 flex items-center hover:bg-gray-50/50 transition-colors">
-                  <div className={cn(
-                    "h-10 w-10 rounded-xl flex items-center justify-center mr-4 shrink-0",
-                    activity.type === 'booking' ? "bg-blue-50 text-blue-600" :
-                    activity.type === 'notice' ? "bg-amber-50 text-amber-600" :
-                    activity.type === 'document' ? "bg-purple-50 text-purple-600" : 
-                    activity.type === 'system' ? "bg-indigo-50 text-indigo-600" : "bg-emerald-50 text-emerald-600"
-                  )}>
-                    {activity.type === 'booking' ? <Calendar size={18} /> :
-                     activity.type === 'notice' ? <Bell size={18} /> :
-                     activity.type === 'document' ? <FileText size={18} /> :
-                     activity.type === 'system' ? <TrendingUp size={18} /> : <MessageSquare size={18} />}
+            
+            {loading ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
+              </div>
+            ) : pendingBookings.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">
+                <p className="font-bold">No pending approvals</p>
+                <p className="text-sm">You are all caught up.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {pendingBookings.map((booking) => (
+                  <div key={booking.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-gray-50/50 transition-colors gap-4">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mr-4 shrink-0">
+                        <Calendar size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{booking.facility || 'Unknown Facility'}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{booking.checkIn} to {booking.checkOut}</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                      Pending
+                    </span>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-700">
-                      <span className="font-bold text-gray-900">{activity.user}</span> {activity.action}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{getRelativeTime(activity.createdAt)}</p>
-                  </div>
-                  <ChevronRight className="text-gray-300 h-4 w-4 shrink-0 hidden sm:block" />
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Upcoming Bookings Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 flex items-center">
+                <Calendar className="mr-2 text-indigo-600 h-5 w-5" />
+                Upcoming Bookings
+              </h3>
             </div>
-          )}
+            
+            {loading ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+              </div>
+            ) : upcomingBookings.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">
+                <p className="font-bold">No upcoming bookings</p>
+                <p className="text-sm">There are no upcoming bookings yet.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {upcomingBookings.map((booking) => (
+                  <div key={booking.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-gray-50/50 transition-colors gap-4">
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mr-4 shrink-0">
+                        <Calendar size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{booking.facility || 'Unknown Facility'}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Check-in: {booking.checkIn}</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                      Upcoming
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Quick Actions / Summary */}
@@ -350,172 +309,7 @@ export default function DashboardOverview() {
 
       {/* Calendar Modal */}
       {isCalendarOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 my-8">
-            <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between bg-white gap-4">
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1">
-                  <button 
-                    onClick={handlePrevMonth}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100"
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  <h2 className="text-xl font-bold flex items-center text-gray-900 min-w-[150px] justify-center">
-                    {monthNames[calendarData.month]} {calendarData.year}
-                  </h2>
-                  <button 
-                    onClick={handleNextMonth}
-                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-indigo-600 transition-colors border border-gray-100"
-                  >
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
-                <select 
-                  value={facilityFilter}
-                  onChange={(e) => setFacilityFilter(e.target.value)}
-                  className="text-xs font-bold text-gray-600 border border-gray-100 px-3 py-1.5 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="all">All Facilities</option>
-                  {facilities.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-              </div>
-              <button 
-                onClick={() => setIsCalendarOpen(false)} 
-                className="p-1 hover:bg-gray-100 rounded-full text-gray-500 transition-colors ml-auto"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <div className="grid grid-cols-7 gap-2 mb-2">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <div key={d} className="text-center text-xs font-bold text-gray-400 uppercase tracking-wider py-2">
-                    {d}
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-                {calendarData.days.map((item, i) => {
-                  const dateStr = item.day ? `${calendarData.year}-${String(calendarData.month + 1).padStart(2, '0')}-${String(item.day).padStart(2, '0')}` : null;
-                  const isSelected = selectedDate === dateStr;
-                  
-                  const hasApproved = item.booked.some(b => b.status === "approved");
-                  const hasPending = item.booked.some(b => b.status === "pending");
-                  
-                  return (
-                    <div 
-                      key={i} 
-                      onClick={() => item.day && setSelectedDate(dateStr)}
-                      className={cn(
-                        "aspect-square rounded-xl flex flex-col items-center sm:items-start justify-center sm:justify-start text-sm border transition-all p-1 sm:p-1.5 overflow-hidden cursor-pointer",
-                        !item.day ? "border-transparent bg-transparent cursor-default" :
-                        item.booked.length > 0 
-                          ? cn(
-                              hasApproved ? "bg-indigo-50 border-indigo-200 font-bold text-indigo-900" : "bg-amber-50 border-amber-200 font-bold text-amber-900",
-                              "shadow-sm hover:scale-[1.02]",
-                              isSelected && "ring-2 ring-indigo-500 border-transparent shadow-md bg-indigo-100"
-                            )
-                          : cn(
-                              "bg-white border-gray-100 text-gray-600 hover:border-indigo-200 hover:bg-gray-50",
-                              isSelected && "ring-2 ring-indigo-500 border-transparent shadow-md"
-                            )
-                      )}
-                    >
-                      {item.day && (
-                        <>
-                          <span className={cn(
-                            "text-[10px] sm:text-xs mb-0.5",
-                            isSelected && "text-indigo-600"
-                          )}>{item.day}</span>
-                          
-                          {/* Indicator for Mobile */}
-                          {item.booked.length > 0 && (
-                            <div className="sm:hidden flex space-x-0.5 mt-auto">
-                              {item.booked.slice(0, 3).map((b, idx) => (
-                                <div key={idx} className={cn("w-1.5 h-1.5 rounded-full", b.status === 'approved' ? "bg-indigo-500" : "bg-amber-500")} />
-                              ))}
-                              {item.booked.length > 3 && <div className="text-[6px] text-indigo-500 font-bold">+</div>}
-                            </div>
-                          )}
-
-                          {/* Detail View for Desktop */}
-                          {item.booked.length > 0 && (
-                            <div className="hidden sm:flex flex-col gap-0.5 w-full overflow-y-auto no-scrollbar">
-                              {item.booked.slice(0, 2).map((booking, idx) => (
-                                <div 
-                                  key={idx} 
-                                  title={booking.facility}
-                                  className={cn(
-                                    "text-[8px] leading-tight px-1 py-0.5 rounded truncate w-full border",
-                                    booking.status === 'approved' 
-                                      ? "bg-indigo-100 text-indigo-700 border-indigo-200" 
-                                      : "bg-amber-100 text-amber-700 border-amber-200"
-                                  )}
-                                >
-                                  {booking.facility}
-                                </div>
-                              ))}
-                              {item.booked.length > 2 && (
-                                <div className="text-[7px] text-indigo-500 font-bold pl-1">
-                                  +{item.booked.length - 2} more
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Selected Day Details (Visible when something is selected) */}
-              {selectedDate && (
-                <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in slide-in-from-top-2 duration-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold text-gray-900 border-l-4 border-indigo-600 pl-3">
-                      Bookings on {new Date(selectedDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    </h4>
-                    <button 
-                      onClick={() => setSelectedDate(null)}
-                      className="text-xs text-gray-400 hover:text-gray-600 font-bold"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  
-                  {calendarData.days.find(d => d.day && `${calendarData.year}-${String(calendarData.month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` === selectedDate)?.booked.length! > 0 ? (
-                    <div className="space-y-2">
-                      {calendarData.days.find(d => d.day && `${calendarData.year}-${String(calendarData.month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}` === selectedDate)?.booked.map((bk, i) => (
-                        <div key={i} className={cn(
-                          "flex items-center p-3 bg-white rounded-xl shadow-sm border text-sm",
-                          bk.status === 'approved' ? "border-indigo-100" : "border-amber-100"
-                        )}>
-                          <div className={cn("w-2 h-2 rounded-full mr-3 animate-pulse", bk.status === 'approved' ? "bg-indigo-600" : "bg-amber-500")} />
-                          <div className="flex flex-col">
-                            <span className="font-bold text-gray-800">{bk.facility}</span>
-                            <span className="text-[10px] text-gray-400 capitalize">{bk.status} • {bk.checkIn} to {bk.checkOut}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-gray-400 italic text-xs">
-                      No bookings for this day.
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs font-bold text-gray-500">
-                <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-indigo-500 mr-2"></div> Approved</div>
-                <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-amber-500 mr-2"></div> Pending</div>
-                <div className="flex items-center"><div className="w-3 h-3 rounded-full border border-gray-200 mr-2"></div> Available</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CalendarModal bookings={bookings} onClose={() => setIsCalendarOpen(false)} />
       )}
 
     </div>

@@ -2,33 +2,38 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Next.js 16.2.0 Proxy (formerly Middleware)
- * Protects the dashboard routes from unauthorized access.
+ * Next.js proxy routing filter (replaces middleware.ts)
+ * Protects dashboard routes and redirects unauthenticated users.
  */
-export default function proxy(request: NextRequest) {
+export function proxy(request: NextRequest) {
+  const adminAuthCookie = request.cookies.get('admin_auth');
   const { pathname } = request.nextUrl;
-  
+
   // Protect all dashboard routes
   if (pathname.startsWith('/dashboard')) {
-    const authCookie = request.cookies.get('admin_auth');
-    if (!authCookie) {
-      // Redirect to login if the custom admin_auth cookie is missing
+    if (!adminAuthCookie) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
   }
 
-  // If going to login but already authenticated, redirect to more efficient dashboard path
-  if (pathname === '/login') {
-    const authCookie = request.cookies.get('admin_auth');
-    if (authCookie) {
+  // Redirect root to dashboard (or login if not authenticated)
+  if (pathname === '/') {
+    if (adminAuthCookie) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
+    } else {
+      return NextResponse.redirect(new URL('/login', request.url));
     }
+  }
+
+  // If trying to access login page while authenticated
+  if (pathname === '/login' && adminAuthCookie) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  // Use matcher for performance optimization
-  matcher: ['/dashboard/:path*', '/login'],
+  // Apply proxy filter to root, dashboard routes, and login
+  matcher: ['/', '/dashboard/:path*', '/login'],
 };

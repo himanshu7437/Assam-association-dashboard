@@ -29,6 +29,11 @@ function cn(...inputs: ClassValue[]) {
 
 export type FacilityType = "simple" | "accommodation" | "event";
 
+export interface RoomMedia {
+  url: string;
+  type: "image" | "video";
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -39,6 +44,7 @@ export interface Room {
   checkIn: string;
   checkOut: string;
   images?: string[];
+  media?: RoomMedia[];
 }
 
 export interface PricingSlot {
@@ -53,6 +59,7 @@ export interface Facility {
   description: string;
   image: string;
   gallery?: string[];
+  media?: RoomMedia[];
   type: FacilityType;
   
   // Accommodation
@@ -137,6 +144,7 @@ export default function ServicesPage() {
       description: "", 
       image: "", 
       gallery: [],
+      media: [],
       type: "simple",
       rooms: [],
       pricing: [],
@@ -174,17 +182,23 @@ export default function ServicesPage() {
 
     try {
       setIsUploadingGallery(true);
-      const toastId = toast.loading(`Uploading ${files.length} images...`);
+      const toastId = toast.loading(`Uploading ${files.length} items...`);
       
-      const uploadPromises = files.map(file => uploadToCloudinary(file));
-      const fileUrls = await Promise.all(uploadPromises);
+      const uploadPromises = files.map(async file => {
+        const url = await uploadToCloudinary(file);
+        return {
+          url,
+          type: file.type.startsWith("video") ? "video" : "image" as "image" | "video"
+        };
+      });
+      const uploadedMedia = await Promise.all(uploadPromises);
       
       setCurrentFacility(prev => ({
         ...prev,
-        gallery: [...(prev?.gallery || []), ...fileUrls]
+        media: [...(prev?.media || []), ...uploadedMedia]
       }));
       
-      toast.success("Gallery images uploaded successfully!", { id: toastId });
+      toast.success("Gallery media uploaded successfully!", { id: toastId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed");
     } finally {
@@ -206,17 +220,23 @@ export default function ServicesPage() {
 
     try {
       setUploadingRoomId(roomId);
-      const toastId = toast.loading(`Uploading ${files.length} images...`);
+      const toastId = toast.loading(`Uploading ${files.length} items...`);
       
-      const uploadPromises = files.map(file => uploadToCloudinary(file));
-      const fileUrls = await Promise.all(uploadPromises);
+      const uploadPromises = files.map(async file => {
+        const url = await uploadToCloudinary(file);
+        return {
+          url,
+          type: file.type.startsWith("video") ? "video" : "image" as "image" | "video"
+        };
+      });
+      const uploadedMedia = await Promise.all(uploadPromises);
       
       setCurrentFacility(prev => ({
         ...prev,
-        rooms: (prev?.rooms || []).map(r => r.id === roomId ? { ...r, images: [...(r.images || []), ...fileUrls] } : r)
+        rooms: (prev?.rooms || []).map(r => r.id === roomId ? { ...r, media: [...(r.media || []), ...uploadedMedia] } : r)
       }));
       
-      toast.success("Room images uploaded successfully!", { id: toastId });
+      toast.success("Room media uploaded successfully!", { id: toastId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed");
     } finally {
@@ -303,7 +323,8 @@ export default function ServicesPage() {
         bookingPolicy: "",
         checkIn: "",
         checkOut: "",
-        images: []
+        images: [],
+        media: []
       }]
     }));
   };
@@ -403,7 +424,7 @@ export default function ServicesPage() {
         type="file" 
         ref={galleryInputRef} 
         className="hidden" 
-        accept="image/*" 
+        accept="image/*,video/*" 
         multiple
         onChange={handleGalleryUpload}
       />
@@ -411,7 +432,7 @@ export default function ServicesPage() {
         type="file" 
         ref={roomImageInputRef} 
         className="hidden" 
-        accept="image/*" 
+        accept="image/*,video/*" 
         multiple
         onChange={(e) => {
           if (currentRoomForUpload) {
@@ -573,7 +594,7 @@ export default function ServicesPage() {
               {/* Facility Gallery */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-bold text-gray-700">Facility Gallery</label>
+                  <label className="text-sm font-bold text-gray-700">Facility Media</label>
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
@@ -581,31 +602,60 @@ export default function ServicesPage() {
                     className="inline-flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-colors disabled:opacity-50"
                   >
                     {isUploadingGallery ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
-                    Add Images
+                    Add Media
                   </button>
                 </div>
-                {currentFacility?.gallery && currentFacility.gallery.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {currentFacility.gallery.map((img, idx) => (
-                      <div key={idx} className="relative group aspect-video rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                        <Image src={img} fill alt={`Gallery ${idx}`} className="object-cover" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <button
-                            type="button"
-                            onClick={() => removeGalleryImage(idx)}
-                            className="p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                {(() => {
+                  const galleryItems = (currentFacility?.gallery || []).map((url, idx) => ({ url, type: 'image', source: 'gallery' as const, index: idx }));
+                  const mediaItems = (currentFacility?.media || []).map((item, idx) => ({ url: item.url, type: item.type, source: 'media' as const, index: idx }));
+                  const combined = [...galleryItems, ...mediaItems];
+                  
+                  if (combined.length === 0) {
+                    return (
+                      <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+                        <p className="text-sm text-gray-500">No media added yet.</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-                    <p className="text-sm text-gray-500">No gallery images added yet.</p>
-                  </div>
-                )}
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {combined.map((item, keyIdx) => (
+                        <div key={keyIdx} className="relative group aspect-video rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                          {item.type === 'video' ? (
+                            <video src={item.url} controls muted className="w-full h-full object-cover" />
+                          ) : (
+                            <Image src={item.url} fill alt={`Media ${keyIdx}`} className="object-cover" />
+                          )}
+                          {item.type === 'video' && (
+                            <div className="absolute top-2 left-2 bg-indigo-600/90 backdrop-blur-md text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm">
+                              Video
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item.source === 'gallery') {
+                                  removeGalleryImage(item.index);
+                                } else {
+                                  setCurrentFacility(prev => ({
+                                    ...prev,
+                                    media: (prev?.media || []).filter((_, i) => i !== item.index)
+                                  }));
+                                }
+                              }}
+                              className="p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors pointer-events-auto"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -749,7 +799,7 @@ export default function ServicesPage() {
                           {/* Room Images */}
                           <div className="space-y-2 md:col-span-2 mt-2 pt-4 border-t border-gray-100">
                             <div className="flex items-center justify-between">
-                              <label className="text-xs font-semibold text-gray-600">Room Images</label>
+                              <label className="text-xs font-semibold text-gray-600">Room Media</label>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -760,31 +810,60 @@ export default function ServicesPage() {
                                 className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-bold hover:bg-gray-200 transition-colors disabled:opacity-50"
                               >
                                 {uploadingRoomId === room.id ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
-                                Upload Room Images
+                                Upload Room Media
                               </button>
                             </div>
-                            {room.images && room.images.length > 0 ? (
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {room.images.map((img, idx) => (
-                                  <div key={idx} className="relative group aspect-video rounded-md overflow-hidden border border-gray-200 bg-gray-50">
-                                    <Image src={img} fill alt={`Room ${room.name} image ${idx}`} className="object-cover" />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => removeRoomImage(room.id, idx)}
-                                        className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
-                                    </div>
+                            {(() => {
+                              const roomImages = (room.images || []).map((url, idx) => ({ url, type: 'image', source: 'images' as const, index: idx }));
+                              const roomMedia = (room.media || []).map((item, idx) => ({ url: item.url, type: item.type, source: 'media' as const, index: idx }));
+                              const combinedRoomMedia = [...roomImages, ...roomMedia];
+                              
+                              if (combinedRoomMedia.length === 0) {
+                                return (
+                                  <div className="text-center py-4 text-xs text-gray-400 bg-white border border-dashed border-gray-200 rounded-md">
+                                    No media uploaded for this room.
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-center py-4 text-xs text-gray-400 bg-white border border-dashed border-gray-200 rounded-md">
-                                No images uploaded for this room.
-                              </div>
-                            )}
+                                );
+                              }
+
+                              return (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  {combinedRoomMedia.map((item, keyIdx) => (
+                                    <div key={keyIdx} className="relative group aspect-video rounded-md overflow-hidden border border-gray-200 bg-gray-50">
+                                      {item.type === 'video' ? (
+                                        <video src={item.url} controls muted className="w-full h-full object-cover" />
+                                      ) : (
+                                        <Image src={item.url} fill alt={`Room ${room.name} media ${keyIdx}`} className="object-cover" />
+                                      )}
+                                      {item.type === 'video' && (
+                                        <div className="absolute top-1 left-1 bg-indigo-600/90 backdrop-blur-md text-white text-[8px] uppercase font-bold px-1.5 py-0.5 rounded shadow-sm">
+                                          Video
+                                        </div>
+                                      )}
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (item.source === 'images') {
+                                              removeRoomImage(room.id, item.index);
+                                            } else {
+                                              setCurrentFacility(prev => ({
+                                                ...prev,
+                                                rooms: (prev?.rooms || []).map(r => r.id === room.id ? { ...r, media: (r.media || []).filter((_, i) => i !== item.index) } : r)
+                                              }));
+                                            }
+                                          }}
+                                          className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors pointer-events-auto"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
