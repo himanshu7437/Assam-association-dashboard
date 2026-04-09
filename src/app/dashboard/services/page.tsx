@@ -29,10 +29,7 @@ function cn(...inputs: ClassValue[]) {
 
 export type FacilityType = "simple" | "accommodation" | "event";
 
-export interface RoomMedia {
-  url: string;
-  type: "image" | "video";
-}
+const isVideoUrl = (url: string) => !!(url.match(/\.(mp4|webm|ogg|mov)$/i) || url.includes('/video/'));
 
 export interface Room {
   id: string;
@@ -44,7 +41,6 @@ export interface Room {
   checkIn: string;
   checkOut: string;
   images?: string[];
-  media?: RoomMedia[];
 }
 
 export interface PricingSlot {
@@ -53,13 +49,18 @@ export interface PricingSlot {
   amount: number;
 }
 
+export type FacilityGalleryItem = {
+  type: "image" | "video";
+  url: string;
+} | string;
+
 export interface Facility {
   id: string;
   name: string;
   description: string;
   image: string;
-  gallery?: string[];
-  media?: RoomMedia[];
+  gallery?: FacilityGalleryItem[];
+  media?: FacilityGalleryItem[];
   type: FacilityType;
   
   // Accommodation
@@ -103,10 +104,24 @@ export default function ServicesPage() {
     try {
       setLoading(true);
       const querySnapshot = await getDocs(collection(db, "facilities"));
-      const docsList = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Facility[];
+      const docsList = querySnapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        const gallery = data.gallery || data.media || [];
+        
+        if (data.rooms && Array.isArray(data.rooms)) {
+          data.rooms = data.rooms.map((room: any) => {
+            const { media: roomMedia, ...cleanRoom } = room;
+            return cleanRoom;
+          });
+        }
+
+        return {
+          id: doc.id,
+          ...data,
+          gallery,
+          media: gallery
+        };
+      }) as Facility[];
       
       // Sort by creation or fallback to name
       docsList.sort((a, b) => {
@@ -139,7 +154,17 @@ export default function ServicesPage() {
   };
 
   const openModal = (facility: Facility | null = null) => {
-    setCurrentFacility(facility || { 
+    if (facility) {
+      setCurrentFacility({
+        ...facility,
+        gallery: facility.gallery || facility.media || [],
+        media: facility.gallery || facility.media || []
+      });
+      setIsModalOpen(true);
+      return;
+    }
+    
+    setCurrentFacility({ 
       name: "", 
       description: "", 
       image: "", 
@@ -187,15 +212,15 @@ export default function ServicesPage() {
       const uploadPromises = files.map(async file => {
         const url = await uploadToCloudinary(file);
         return {
-          url,
-          type: file.type.startsWith("video") ? "video" : "image" as "image" | "video"
+          type: file.type.startsWith('video') ? 'video' : 'image',
+          url
         };
       });
-      const uploadedMedia = await Promise.all(uploadPromises);
+      const uploadedFiles = await Promise.all(uploadPromises);
       
       setCurrentFacility(prev => ({
         ...prev,
-        media: [...(prev?.media || []), ...uploadedMedia]
+        gallery: [...(prev?.gallery || []), ...uploadedFiles] as FacilityGalleryItem[]
       }));
       
       toast.success("Gallery media uploaded successfully!", { id: toastId });
@@ -222,18 +247,12 @@ export default function ServicesPage() {
       setUploadingRoomId(roomId);
       const toastId = toast.loading(`Uploading ${files.length} items...`);
       
-      const uploadPromises = files.map(async file => {
-        const url = await uploadToCloudinary(file);
-        return {
-          url,
-          type: file.type.startsWith("video") ? "video" : "image" as "image" | "video"
-        };
-      });
-      const uploadedMedia = await Promise.all(uploadPromises);
+      const uploadPromises = files.map(file => uploadToCloudinary(file));
+      const fileUrls = await Promise.all(uploadPromises);
       
       setCurrentFacility(prev => ({
         ...prev,
-        rooms: (prev?.rooms || []).map(r => r.id === roomId ? { ...r, media: [...(r.media || []), ...uploadedMedia] } : r)
+        rooms: (prev?.rooms || []).map(r => r.id === roomId ? { ...r, images: [...(r.images || []), ...fileUrls] } : r)
       }));
       
       toast.success("Room media uploaded successfully!", { id: toastId });
@@ -269,6 +288,19 @@ export default function ServicesPage() {
       
       // Clean up irrelevant fields based on type
       const dataToSave = { ...currentFacility };
+      
+      const uploadedFiles = dataToSave.gallery || dataToSave.media || [];
+      dataToSave.gallery = uploadedFiles;
+      dataToSave.media = uploadedFiles;
+
+      if (dataToSave.rooms) {
+        dataToSave.rooms = dataToSave.rooms.map(room => {
+          const cleanRoom = { ...room };
+          delete (cleanRoom as any).media;
+          return cleanRoom;
+        });
+      }
+
       if (dataToSave.type === 'simple') {
         delete dataToSave.rooms;
         delete dataToSave.pricing;
@@ -277,8 +309,6 @@ export default function ServicesPage() {
       } else if (dataToSave.type === 'accommodation') {
         delete dataToSave.pricing;
         delete dataToSave.remarks;
-        // Keep bookingPolicy possibly, or put it per room? Requirements say per room for accommodation, but keeping global doesn't hurt.
-        // Actually, requirements mention bookingPolicy inside room for accommodation.
         delete dataToSave.bookingPolicy; 
       } else if (dataToSave.type === 'event') {
         delete dataToSave.rooms;
@@ -323,8 +353,7 @@ export default function ServicesPage() {
         bookingPolicy: "",
         checkIn: "",
         checkOut: "",
-        images: [],
-        media: []
+        images: []
       }]
     }));
   };
@@ -606,9 +635,12 @@ export default function ServicesPage() {
                   </button>
                 </div>
                 {(() => {
-                  const galleryItems = (currentFacility?.gallery || []).map((url, idx) => ({ url, type: 'image', source: 'gallery' as const, index: idx }));
-                  const mediaItems = (currentFacility?.media || []).map((item, idx) => ({ url: item.url, type: item.type, source: 'media' as const, index: idx }));
-                  const combined = [...galleryItems, ...mediaItems];
+                  const combined = (currentFacility?.gallery || []).map((item, idx) => {
+                    if (typeof item === 'string') {
+                      return { url: item, type: isVideoUrl(item) ? 'video' : 'image', index: idx };
+                    }
+                    return { url: item.url, type: item.type, index: idx };
+                  });
                   
                   if (combined.length === 0) {
                     return (
@@ -637,14 +669,7 @@ export default function ServicesPage() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (item.source === 'gallery') {
-                                  removeGalleryImage(item.index);
-                                } else {
-                                  setCurrentFacility(prev => ({
-                                    ...prev,
-                                    media: (prev?.media || []).filter((_, i) => i !== item.index)
-                                  }));
-                                }
+                                removeGalleryImage(item.index);
                               }}
                               className="p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors pointer-events-auto"
                             >
@@ -814,9 +839,11 @@ export default function ServicesPage() {
                               </button>
                             </div>
                             {(() => {
-                              const roomImages = (room.images || []).map((url, idx) => ({ url, type: 'image', source: 'images' as const, index: idx }));
-                              const roomMedia = (room.media || []).map((item, idx) => ({ url: item.url, type: item.type, source: 'media' as const, index: idx }));
-                              const combinedRoomMedia = [...roomImages, ...roomMedia];
+                              const combinedRoomMedia = (room.images || []).map((url, idx) => ({ 
+                                url, 
+                                type: isVideoUrl(url) ? 'video' : 'image', 
+                                index: idx 
+                              }));
                               
                               if (combinedRoomMedia.length === 0) {
                                 return (
@@ -845,14 +872,7 @@ export default function ServicesPage() {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (item.source === 'images') {
-                                              removeRoomImage(room.id, item.index);
-                                            } else {
-                                              setCurrentFacility(prev => ({
-                                                ...prev,
-                                                rooms: (prev?.rooms || []).map(r => r.id === room.id ? { ...r, media: (r.media || []).filter((_, i) => i !== item.index) } : r)
-                                              }));
-                                            }
+                                            removeRoomImage(room.id, item.index);
                                           }}
                                           className="p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors pointer-events-auto"
                                         >
