@@ -14,7 +14,8 @@ import {
   Wrench, 
   MessageSquare,
   LogOut,
-  X
+  X,
+  BookOpen
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -30,6 +31,7 @@ const navItems = [
   { name: "Memberships", href: "/dashboard/memberships", icon: UserCheck },
   { name: "Notices", href: "/dashboard/notices", icon: Bell },
   { name: "Documents", href: "/dashboard/documents", icon: FileText },
+  { name: "Publications", href: "/dashboard/publications", icon: BookOpen },
   { name: "Gallery", href: "/dashboard/gallery", icon: ImageIcon },
   { name: "Committee", href: "/dashboard/committee", icon: Users },
   { name: "Services", href: "/dashboard/services", icon: Wrench },
