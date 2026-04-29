@@ -15,6 +15,7 @@ import {
   Loader2
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import StorageUsage from "@/components/dashboard/StorageUsage";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { db } from "@/lib/firebase";
@@ -303,6 +304,9 @@ export default function DashboardOverview() {
               Check Calendar
             </button>
           </div>
+
+          {/* Cloudinary Storage Monitor */}
+          <StorageUsage />
 
         </div>
       </div>

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@react-email/components": "^1.0.10",
+    "cloudinary": "^2.10.0",
     "clsx": "^2.1.1",
     "firebase": "^12.11.0",
     "framer-motion": "^12.38.0",
